@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PT Proxy Config Builder</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #14212b;
+      --muted: #5a6b78;
+      --line: #d5dde4;
+      --panel: #ffffff;
+      --bg0: #eef3f6;
+      --bg1: #dfe8ef;
+      --accent: #0f7a6c;
+      --accent-ink: #08574d;
+      --warn: #9a3412;
+      --danger: #b42318;
+      --chip: #e7f3f1;
+      --shadow: 0 18px 40px rgba(20, 33, 43, 0.08);
+      --radius: 14px;
+      --mono: "IBM Plex Mono", ui-monospace, monospace;
+      --sans: "Outfit", system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      font-family: var(--sans);
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 500px at 10% -10%, #c9ebe4 0%, transparent 55%),
+        radial-gradient(900px 420px at 100% 0%, #cfdceb 0%, transparent 50%),
+        linear-gradient(180deg, var(--bg0), var(--bg1));
+      background-attachment: fixed;
+    }
+
+    .wrap {
+      width: min(1180px, calc(100% - 2rem));
+      margin: 0 auto;
+      padding: 2rem 0 3.5rem;
+    }
+
+    header.hero {
+      display: grid;
+      gap: 0.85rem;
+      margin-bottom: 1.75rem;
+      animation: rise 0.55s ease both;
+    }
+    .brand {
+      font-size: clamp(2.4rem, 5vw, 3.6rem);
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      line-height: 0.95;
+      margin: 0;
+    }
+    .brand span { color: var(--accent); }
+    .lead {
+      margin: 0;
+      max-width: 42rem;
+      color: var(--muted);
+      font-size: 1.05rem;
+      line-height: 1.45;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.65rem;
+      margin-top: 0.35rem;
+    }
+
+    button, .file-btn {
+      appearance: none;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      padding: 0.7rem 1.1rem;
+      font: 500 0.95rem var(--sans);
+      cursor: pointer;
+      transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+    }
+    button:hover, .file-btn:hover { transform: translateY(-1px); }
+    button:active, .file-btn:active { transform: translateY(0); }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+    .btn-primary:hover { background: var(--accent-ink); }
+    .btn-secondary {
+      background: var(--panel);
+      border-color: var(--line);
+      color: var(--ink);
+    }
+    .btn-ghost {
+      background: transparent;
+      border-color: var(--line);
+      color: var(--muted);
+    }
+    .btn-danger {
+      background: #fff5f4;
+      border-color: #f0c7c3;
+      color: var(--danger);
+      padding: 0.4rem 0.75rem;
+      font-size: 0.85rem;
+    }
+    .file-btn {
+      display: inline-flex;
+      align-items: center;
+      background: var(--panel);
+      border-color: var(--line);
+      color: var(--ink);
+    }
+    .file-btn input { display: none; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 1.25rem;
+      align-items: start;
+    }
+    @media (max-width: 960px) {
+      .layout { grid-template-columns: 1fr; }
+      .preview-panel { position: static !important; }
+    }
+
+    .stack { display: grid; gap: 1rem; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      animation: rise 0.65s ease both;
+    }
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 0.95rem 1.1rem;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, #fbfcfd, #f4f7fa);
+    }
+    .panel-head h2 {
+      margin: 0;
+      font-size: 1.05rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+    .panel-body { padding: 1rem; display: grid; gap: 0.85rem; }
+
+    .entry {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 0.9rem;
+      background: #fafcfd;
+      display: grid;
+      gap: 0.75rem;
+    }
+    .entry-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+    .entry-title {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.18rem 0.55rem;
+      border-radius: 999px;
+      background: var(--chip);
+      color: var(--accent-ink);
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      font-weight: 500;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.7rem;
+    }
+    @media (max-width: 640px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+    .field { display: grid; gap: 0.28rem; }
+    .field.full { grid-column: 1 / -1; }
+    label {
+      font-size: 0.78rem;
+      color: var(--muted);
+      font-weight: 500;
+      letter-spacing: 0.01em;
+    }
+    input[type="text"],
+    input[type="number"],
+    input[type="password"],
+    select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 0.62rem 0.72rem;
+      font: 400 0.9rem var(--mono);
+      color: var(--ink);
+      background: #fff;
+      outline: none;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    input:focus, select:focus {
+      border-color: #7fb8af;
+      box-shadow: 0 0 0 3px rgba(15, 122, 108, 0.12);
+    }
+    .check {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      min-height: 2.5rem;
+      padding-top: 1.05rem;
+    }
+    .check input { width: 1rem; height: 1rem; accent-color: var(--accent); }
+    .check label { color: var(--ink); font-size: 0.9rem; cursor: pointer; }
+
+    .preview-panel { position: sticky; top: 1rem; }
+    .preview-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.75rem;
+      align-items: center;
+      color: var(--muted);
+      font-size: 0.82rem;
+      padding: 0 0.15rem;
+    }
+    pre {
+      margin: 0;
+      padding: 1rem;
+      max-height: min(72vh, 820px);
+      overflow: auto;
+      background: #101820;
+      color: #d7e6df;
+      font: 400 0.82rem/1.5 var(--mono);
+      border-radius: 0 0 var(--radius) var(--radius);
+      white-space: pre;
+    }
+    .toast {
+      position: fixed;
+      right: 1rem;
+      bottom: 1rem;
+      background: var(--ink);
+      color: #fff;
+      padding: 0.7rem 1rem;
+      border-radius: 999px;
+      font-size: 0.9rem;
+      opacity: 0;
+      transform: translateY(8px);
+      pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      z-index: 20;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+
+    .empty {
+      color: var(--muted);
+      font-size: 0.92rem;
+      padding: 0.4rem 0.2rem;
+    }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <h1 class="brand">PT<span>Proxy</span></h1>
+      <p class="lead">Fill in server and client tunnel entries to build a ready-to-use <code>config.json</code>. Empty optional fields are omitted.</p>
+      <div class="actions">
+        <button type="button" class="btn-primary" id="copyBtn">Copy JSON</button>
+        <button type="button" class="btn-secondary" id="downloadBtn">Download config.json</button>
+        <label class="file-btn">Import JSON<input type="file" id="importFile" accept="application/json,.json" /></label>
+        <button type="button" class="btn-ghost" id="resetBtn">Reset</button>
+      </div>
+    </header>
+
+    <div class="layout">
+      <div class="stack">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Servers</h2>
+            <button type="button" class="btn-secondary" id="addServer">+ Add server</button>
+          </div>
+          <div class="panel-body" id="servers"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Clients</h2>
+            <button type="button" class="btn-secondary" id="addClient">+ Add client</button>
+          </div>
+          <div class="panel-body" id="clients"></div>
+        </section>
+      </div>
+
+      <aside class="panel preview-panel">
+        <div class="panel-head">
+          <h2>JSON preview</h2>
+          <div class="preview-meta"><span id="stats"></span></div>
+        </div>
+        <pre id="preview"></pre>
+      </aside>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const TYPES = ["obfs4", "obfs3", "obfs2", "dpi", "snowflake", "ftp"];
+    const isObfs = (t) => t === "obfs4" || t === "obfs3" || t === "obfs2";
+
+    const state = {
+      server: [],
+      client: [],
+    };
+
+    function defaultServer(type) {
+      return {
+        type,
+        listen: type === "dpi" ? "" : "0.0.0.0:3334",
+        external: false,
+        "external-service": "",
+        cert: "",
+        "private-key": "",
+        "enc-key": "change-me-shared-key",
+        protocol: "auto",
+        http: "",
+        https: type === "dpi" ? "0.0.0.0:443" : "",
+        "tls-cert": "",
+        "tls-key": "",
+        "acme-email": "",
+        "acme-domain": "",
+        "self-signed": type === "dpi",
+        redirect: "",
+        "cert-dir": "",
+        "socks-bind": "127.0.0.1:0",
+        user: "tunnel",
+        pass: "secret",
+        "pasv-ip": "",
+        "upload-ports": "8080",
+        "download-ports": "8081",
+        tls: false,
+      };
+    }
+
+    function defaultClient(type) {
+      return {
+        type,
+        listen: "127.0.0.1:4455",
+        address: type === "dpi" ? "https://127.0.0.1:443" : type === "snowflake" ? "ws://127.0.0.1:8080/" : "127.0.0.1:3334",
+        external: false,
+        cert: "",
+        "enc-key": "change-me-shared-key",
+        protocol: "auto",
+        sni: "",
+        insecure: false,
+        "http-proxy": "",
+        "redirect-follow": true,
+        "dns-upstream": "1.1.1.1:53",
+        "dns-network": "tcp",
+        "front-host": "",
+        uplink: "post-async",
+        verbose: false,
+        proxy: "",
+        "forward-bind": "",
+        user: "tunnel",
+        pass: "secret",
+        "upload-channels": 1,
+        "download-channels": 1,
+        "override-up-addr": "",
+        "override-down-addr": "",
+        decoy: false,
+        "socks-user": "",
+        "socks-pass": "",
+        tls: false,
+      };
+    }
+
+    function el(tag, attrs = {}, children = []) {
+      const node = document.createElement(tag);
+      for (const [k, v] of Object.entries(attrs)) {
+        if (k === "className") node.className = v;
+        else if (k === "text") node.textContent = v;
+        else if (k.startsWith("on") && typeof v === "function") node.addEventListener(k.slice(2).toLowerCase(), v);
+        else if (v !== undefined && v !== null) node.setAttribute(k, v);
+      }
+      for (const child of [].concat(children)) {
+        if (child == null) continue;
+        node.append(child.nodeType ? child : document.createTextNode(child));
+      }
+      return node;
+    }
+
+    function fieldText(label, value, onInput, full = false, placeholder = "") {
+      return el("div", { className: "field" + (full ? " full" : "") }, [
+        el("label", { text: label }),
+        el("input", {
+          type: "text",
+          value: value ?? "",
+          placeholder,
+          onInput: (e) => onInput(e.target.value),
+        }),
+      ]);
+    }
+
+    function fieldNumber(label, value, onInput) {
+      return el("div", { className: "field" }, [
+        el("label", { text: label }),
+        el("input", {
+          type: "number",
+          value: value ?? 0,
+          min: "0",
+          onInput: (e) => onInput(Number(e.target.value || 0)),
+        }),
+      ]);
+    }
+
+    function fieldSelect(label, value, options, onChange) {
+      const select = el("select", {
+        onChange: (e) => onChange(e.target.value),
+      }, options.map((opt) => el("option", { value: opt, text: opt, ...(opt === value ? { selected: "" } : {}) })));
+      select.value = value;
+      return el("div", { className: "field" }, [el("label", { text: label }), select]);
+    }
+
+    function fieldCheck(label, checked, onChange) {
+      const id = "c_" + Math.random().toString(36).slice(2, 9);
+      return el("div", { className: "field check" }, [
+        el("input", {
+          type: "checkbox",
+          id,
+          ...(checked ? { checked: "" } : {}),
+          onChange: (e) => onChange(e.target.checked),
+        }),
+        el("label", { text: label, for: id }),
+      ]);
+    }
+
+    function setServerField(index, key, val, rebuild = false) {
+      state.server[index][key] = val;
+      if (key === "type") Object.assign(state.server[index], defaultServer(val), { type: val });
+      if (rebuild || key === "type") render();
+      else updatePreview();
+    }
+
+    function setClientField(index, key, val, rebuild = false) {
+      state.client[index][key] = val;
+      if (key === "type") Object.assign(state.client[index], defaultClient(val), { type: val });
+      if (rebuild || key === "type") render();
+      else updatePreview();
+    }
+
+    function renderServerFields(entry, index) {
+      const type = entry.type;
+      const soft = (key) => (v) => setServerField(index, key, v, false);
+      const hard = (key) => (v) => setServerField(index, key, v, true);
+      const fields = [
+        fieldSelect("type", type, TYPES, hard("type")),
+      ];
+
+      if (type !== "dpi") {
+        fields.push(fieldText("listen", entry.listen, soft("listen"), false, "0.0.0.0:3334"));
+      }
+      if (isObfs(type)) {
+        fields.push(
+          fieldCheck("external", !!entry.external, soft("external")),
+          fieldText("external-service", entry["external-service"], soft("external-service"), false, "127.0.0.1:1080"),
+          fieldText("cert", entry.cert, soft("cert"), true, type === "obfs4" ? "auto-generated if empty" : ""),
+        );
+        if (type === "obfs4") {
+          fields.push(fieldText("private-key", entry["private-key"], soft("private-key"), true));
+        }
+      }
+      if (type === "dpi") {
+        fields.push(
+          fieldText("enc-key", entry["enc-key"], soft("enc-key")),
+          fieldSelect("protocol", entry.protocol || "auto", ["auto", "h1", "h2"], soft("protocol")),
+          fieldText("http", entry.http, soft("http"), false, ":80"),
+          fieldText("https", entry.https, soft("https"), false, ":443"),
+          fieldCheck("self-signed", !!entry["self-signed"], soft("self-signed")),
+          fieldText("tls-cert", entry["tls-cert"], soft("tls-cert")),
+          fieldText("tls-key", entry["tls-key"], soft("tls-key")),
+          fieldText("acme-email", entry["acme-email"], soft("acme-email")),
+          fieldText("acme-domain", entry["acme-domain"], soft("acme-domain")),
+          fieldText("cert-dir", entry["cert-dir"], soft("cert-dir")),
+          fieldText("redirect", entry.redirect, soft("redirect"), true, "https://example.com"),
+        );
+      }
+      if (type === "snowflake") {
+        fields.push(
+          fieldText("socks-bind", entry["socks-bind"], soft("socks-bind"), false, "127.0.0.1:0"),
+          fieldText("tls-cert", entry["tls-cert"], soft("tls-cert")),
+          fieldText("tls-key", entry["tls-key"], soft("tls-key")),
+        );
+      }
+      if (type === "ftp") {
+        fields.push(
+          fieldText("user", entry.user, soft("user")),
+          fieldText("pass", entry.pass, soft("pass")),
+          fieldText("enc-key", entry["enc-key"], soft("enc-key")),
+          fieldText("pasv-ip", entry["pasv-ip"], soft("pasv-ip"), false, "YOUR.PUBLIC.IP"),
+          fieldText("upload-ports", entry["upload-ports"], soft("upload-ports"), false, "8080 or 8080-8800"),
+          fieldText("download-ports", entry["download-ports"], soft("download-ports"), false, "8081 or 8080-8800"),
+          fieldCheck("tls", !!entry.tls, soft("tls")),
+          fieldText("tls-cert", entry["tls-cert"], soft("tls-cert")),
+          fieldText("tls-key", entry["tls-key"], soft("tls-key")),
+        );
+      }
+      return el("div", { className: "grid" }, fields);
+    }
+
+    function renderClientFields(entry, index) {
+      const type = entry.type;
+      const soft = (key) => (v) => setClientField(index, key, v, false);
+      const hard = (key) => (v) => setClientField(index, key, v, true);
+      const fields = [
+        fieldSelect("type", type, TYPES, hard("type")),
+        fieldText("listen", entry.listen, soft("listen"), false, "127.0.0.1:4455"),
+        fieldText("address", entry.address, soft("address"), true,
+          type === "dpi" ? "https://host:443" : type === "snowflake" ? "ws://host:8080/" : "host:port"),
+      ];
+
+      if (isObfs(type)) {
+        fields.push(
+          fieldCheck("external", !!entry.external, soft("external")),
+          fieldText("cert", entry.cert, soft("cert"), true, type === "obfs4" ? "server cert" : ""),
+        );
+      }
+      if (type === "dpi") {
+        fields.push(
+          fieldText("enc-key", entry["enc-key"], soft("enc-key")),
+          fieldSelect("protocol", entry.protocol || "auto", ["auto", "h1", "h2"], soft("protocol")),
+          fieldText("sni", entry.sni, soft("sni")),
+          fieldCheck("insecure", !!entry.insecure, soft("insecure")),
+          fieldText("http-proxy", entry["http-proxy"], soft("http-proxy"), false, "127.0.0.1:8080"),
+          fieldCheck("redirect-follow", entry["redirect-follow"] !== false, soft("redirect-follow")),
+          fieldText("dns-upstream", entry["dns-upstream"], soft("dns-upstream")),
+          fieldSelect("dns-network", entry["dns-network"] || "tcp", ["tcp", "udp"], soft("dns-network")),
+          fieldText("front-host", entry["front-host"], soft("front-host")),
+          fieldSelect("uplink", entry.uplink || "post-async", ["post-async", "stream"], soft("uplink")),
+          fieldCheck("verbose", !!entry.verbose, soft("verbose")),
+        );
+      }
+      if (type === "snowflake") {
+        fields.push(
+          fieldText("sni", entry.sni, soft("sni")),
+          fieldText("front-host", entry["front-host"], soft("front-host")),
+          fieldText("proxy", entry.proxy, soft("proxy"), false, "socks5://127.0.0.1:9050"),
+          fieldText("forward-bind", entry["forward-bind"], soft("forward-bind")),
+          fieldCheck("insecure", !!entry.insecure, soft("insecure")),
+        );
+      }
+      if (type === "ftp") {
+        fields.push(
+          fieldText("user", entry.user, soft("user")),
+          fieldText("pass", entry.pass, soft("pass")),
+          fieldText("enc-key", entry["enc-key"], soft("enc-key")),
+          fieldNumber("upload-channels", entry["upload-channels"], soft("upload-channels")),
+          fieldNumber("download-channels", entry["download-channels"], soft("download-channels")),
+          fieldText("override-up-addr", entry["override-up-addr"], soft("override-up-addr")),
+          fieldText("override-down-addr", entry["override-down-addr"], soft("override-down-addr")),
+          fieldText("socks-user", entry["socks-user"], soft("socks-user")),
+          fieldText("socks-pass", entry["socks-pass"], soft("socks-pass")),
+          fieldCheck("decoy", !!entry.decoy, soft("decoy")),
+          fieldCheck("tls", !!entry.tls, soft("tls")),
+          fieldCheck("verbose", !!entry.verbose, soft("verbose")),
+        );
+      }
+      return el("div", { className: "grid" }, fields);
+    }
+
+    function cleanServer(entry) {
+      const type = entry.type;
+      const out = { type };
+      const set = (k, v, keepFalse = false) => {
+        if (v === undefined || v === null) return;
+        if (typeof v === "string" && v.trim() === "") return;
+        if (typeof v === "boolean" && !v && !keepFalse) return;
+        out[k] = typeof v === "string" ? v.trim() : v;
+      };
+
+      if (type !== "dpi") set("listen", entry.listen);
+      if (isObfs(type)) {
+        set("external", !!entry.external, true);
+        set("external-service", entry["external-service"]);
+        set("cert", entry.cert);
+        if (type === "obfs4") set("private-key", entry["private-key"]);
+      }
+      if (type === "dpi") {
+        set("enc-key", entry["enc-key"]);
+        set("protocol", entry.protocol);
+        set("http", entry.http);
+        set("https", entry.https);
+        set("self-signed", !!entry["self-signed"]);
+        set("tls-cert", entry["tls-cert"]);
+        set("tls-key", entry["tls-key"]);
+        set("acme-email", entry["acme-email"]);
+        set("acme-domain", entry["acme-domain"]);
+        set("cert-dir", entry["cert-dir"]);
+        set("redirect", entry.redirect);
+      }
+      if (type === "snowflake") {
+        set("listen", entry.listen);
+        set("socks-bind", entry["socks-bind"]);
+        set("tls-cert", entry["tls-cert"]);
+        set("tls-key", entry["tls-key"]);
+      }
+      if (type === "ftp") {
+        set("listen", entry.listen);
+        set("user", entry.user);
+        set("pass", entry.pass);
+        set("enc-key", entry["enc-key"]);
+        set("pasv-ip", entry["pasv-ip"]);
+        set("upload-ports", entry["upload-ports"]);
+        set("download-ports", entry["download-ports"]);
+        set("tls", !!entry.tls);
+        set("tls-cert", entry["tls-cert"]);
+        set("tls-key", entry["tls-key"]);
+      }
+      return out;
+    }
+
+    function cleanClient(entry) {
+      const type = entry.type;
+      const out = { type };
+      const set = (k, v, keepFalse = false) => {
+        if (v === undefined || v === null) return;
+        if (typeof v === "string" && v.trim() === "") return;
+        if (typeof v === "boolean" && !v && !keepFalse) return;
+        if (typeof v === "number" && !Number.isFinite(v)) return;
+        out[k] = typeof v === "string" ? v.trim() : v;
+      };
+
+      set("listen", entry.listen);
+      set("address", entry.address);
+
+      if (isObfs(type)) {
+        set("external", !!entry.external, true);
+        set("cert", entry.cert);
+      }
+      if (type === "dpi") {
+        set("enc-key", entry["enc-key"]);
+        set("protocol", entry.protocol);
+        set("sni", entry.sni);
+        set("insecure", !!entry.insecure);
+        set("http-proxy", entry["http-proxy"]);
+        if (entry["redirect-follow"] === false) out["redirect-follow"] = false;
+        set("dns-upstream", entry["dns-upstream"]);
+        set("dns-network", entry["dns-network"]);
+        set("front-host", entry["front-host"]);
+        set("uplink", entry.uplink || "post-async");
+        set("verbose", !!entry.verbose);
+      }
+      if (type === "snowflake") {
+        set("sni", entry.sni);
+        set("front-host", entry["front-host"]);
+        set("proxy", entry.proxy);
+        set("forward-bind", entry["forward-bind"]);
+        set("insecure", !!entry.insecure);
+      }
+      if (type === "ftp") {
+        set("user", entry.user);
+        set("pass", entry.pass);
+        set("enc-key", entry["enc-key"]);
+        if (entry["upload-channels"] > 0) out["upload-channels"] = entry["upload-channels"];
+        if (entry["download-channels"] > 0) out["download-channels"] = entry["download-channels"];
+        set("override-up-addr", entry["override-up-addr"]);
+        set("override-down-addr", entry["override-down-addr"]);
+        set("socks-user", entry["socks-user"]);
+        set("socks-pass", entry["socks-pass"]);
+        set("decoy", !!entry.decoy);
+        set("tls", !!entry.tls);
+        set("verbose", !!entry.verbose);
+      }
+      return out;
+    }
+
+    function buildConfig() {
+      const out = {};
+      if (state.server.length) out.server = state.server.map(cleanServer);
+      if (state.client.length) out.client = state.client.map(cleanClient);
+      return out;
+    }
+
+    function prettyJSON() {
+      return JSON.stringify(buildConfig(), null, 2);
+    }
+
+    function toast(msg) {
+      const node = document.getElementById("toast");
+      node.textContent = msg;
+      node.classList.add("show");
+      clearTimeout(toast._t);
+      toast._t = setTimeout(() => node.classList.remove("show"), 1600);
+    }
+
+    function hydrateFromConfig(cfg) {
+      const mapServer = (raw) => Object.assign(defaultServer(raw.type || "obfs4"), raw);
+      const mapClient = (raw) => Object.assign(defaultClient(raw.type || "obfs4"), raw);
+      state.server = Array.isArray(cfg.server) ? cfg.server.map(mapServer) : [];
+      state.client = Array.isArray(cfg.client) ? cfg.client.map(mapClient) : [];
+      render();
+    }
+
+    function renderList(containerId, list, kind) {
+      const root = document.getElementById(containerId);
+      root.innerHTML = "";
+      if (!list.length) {
+        root.append(el("div", { className: "empty", text: `No ${kind} entries yet.` }));
+        return;
+      }
+      list.forEach((entry, index) => {
+        const card = el("div", { className: "entry" }, [
+          el("div", { className: "entry-top" }, [
+            el("div", { className: "entry-title" }, [
+              `${kind === "server" ? "Server" : "Client"} #${index + 1}`,
+              el("span", { className: "chip", text: entry.type }),
+            ]),
+            el("button", {
+              type: "button",
+              className: "btn-danger",
+              text: "Remove",
+              onClick: () => {
+                list.splice(index, 1);
+                render();
+              },
+            }),
+          ]),
+          kind === "server" ? renderServerFields(entry, index) : renderClientFields(entry, index),
+        ]);
+        root.append(card);
+      });
+    }
+
+    function updatePreview() {
+      document.getElementById("preview").textContent = prettyJSON();
+      document.getElementById("stats").textContent =
+        `${state.server.length} server · ${state.client.length} client`;
+    }
+
+    function render() {
+      renderList("servers", state.server, "server");
+      renderList("clients", state.client, "client");
+      updatePreview();
+    }
+
+    document.getElementById("addServer").addEventListener("click", () => {
+      state.server.push(defaultServer("obfs4"));
+      render();
+    });
+    document.getElementById("addClient").addEventListener("click", () => {
+      state.client.push(defaultClient("obfs4"));
+      render();
+    });
+    document.getElementById("copyBtn").addEventListener("click", async () => {
+      const text = prettyJSON();
+      try {
+        await navigator.clipboard.writeText(text);
+        toast("Copied to clipboard");
+      } catch {
+        const ta = el("textarea");
+        ta.value = text;
+        document.body.append(ta);
+        ta.select();
+        document.execCommand("copy");
+        ta.remove();
+        toast("Copied to clipboard");
+      }
+    });
+    document.getElementById("downloadBtn").addEventListener("click", () => {
+      const blob = new Blob([prettyJSON() + "\n"], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = el("a", { href: url, download: "config.json" });
+      document.body.append(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast("Download started");
+    });
+    document.getElementById("resetBtn").addEventListener("click", () => {
+      state.server = [];
+      state.client = [];
+      render();
+      toast("Reset to empty");
+    });
+    document.getElementById("importFile").addEventListener("change", async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const cfg = JSON.parse(text);
+        hydrateFromConfig(cfg);
+        toast("Imported " + file.name);
+      } catch (err) {
+        toast("Import failed: invalid JSON");
+        console.error(err);
+      }
+      e.target.value = "";
+    });
+
+    render();
+  </script>
+</body>
+</html>
