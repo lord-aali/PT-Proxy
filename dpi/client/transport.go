@@ -84,6 +84,11 @@ func NewTransport(cfg TransportConfig) (*Transport, error) {
 	if uplink != common.UplinkPostAsync && uplink != common.UplinkStream {
 		return nil, fmt.Errorf("invalid uplink %q (expected post-async or stream)", uplink)
 	}
+	// Long-lived chunked streams are unreliable over HTTP/2 and many middleboxes;
+	// pin stream mode to HTTP/1.1.
+	if uplink == common.UplinkStream {
+		proto = "h1"
+	}
 
 	tr := &Transport{
 		baseURL:   cfg.ServerURL,
@@ -170,10 +175,11 @@ func (t *Transport) Connect(network, address string) (uint32, error) {
 		if err != nil {
 			return 0, err
 		}
+		sess.pin(connID)
 		if err := sess.writeEncrypted(encrypted); err != nil {
+			sess.unpin(connID)
 			return 0, err
 		}
-		sess.pin(connID)
 		atomic.AddInt32(&t.active, 1)
 		return connID, nil
 	}

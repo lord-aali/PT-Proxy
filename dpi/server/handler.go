@@ -129,6 +129,10 @@ func (h *tunnelHandler) handleStreamUpload(w http.ResponseWriter, r *http.Reques
 	}
 	_ = h.server.getOrCreateSession(sessionID)
 
+	// HTTP/1.1 handlers must opt into reading the request body after writing
+	// the response; without this the POST body never arrives and stream hangs.
+	_ = http.NewResponseController(w).EnableFullDuplex()
+
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.WriteHeader(http.StatusOK)
@@ -302,6 +306,7 @@ func (h *tunnelHandler) handleSessionDownload(w http.ResponseWriter, r *http.Req
 	}
 
 	sess := h.server.getOrCreateSession(sessionID)
+	_ = http.NewResponseController(w).EnableFullDuplex()
 	filename := randomFilename()
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))

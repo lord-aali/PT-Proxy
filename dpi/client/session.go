@@ -28,14 +28,12 @@ type connPipe struct {
 
 func (t *Transport) pickSession() (*muxSession, error) {
 	t.sessMu.Lock()
-	defer t.sessMu.Unlock()
-
 	active := atomic.LoadInt32(&t.active)
-	// Open a second session under load when the first is busy.
 	needSecond := active >= 8 && len(t.sessions) < maxSessions
 	for _, s := range t.sessions {
 		if s != nil && !s.isClosed() {
 			if !needSecond || s.pinCount() < int(active)/2+1 {
+				t.sessMu.Unlock()
 				return s, nil
 			}
 		}
@@ -43,13 +41,27 @@ func (t *Transport) pickSession() (*muxSession, error) {
 	if len(t.sessions) >= maxSessions {
 		for _, s := range t.sessions {
 			if s != nil && !s.isClosed() {
+				t.sessMu.Unlock()
 				return s, nil
 			}
 		}
 	}
+	t.sessMu.Unlock()
+
 	s, err := t.startSession()
 	if err != nil {
 		return nil, err
+	}
+
+	t.sessMu.Lock()
+	defer t.sessMu.Unlock()
+	if len(t.sessions) >= maxSessions {
+		for _, existing := range t.sessions {
+			if existing != nil && !existing.isClosed() {
+				s.close()
+				return existing, nil
+			}
+		}
 	}
 	t.sessions = append(t.sessions, s)
 	return s, nil
@@ -154,12 +166,14 @@ func (t *Transport) startSession() (*muxSession, error) {
 	go func() {
 		req, err := http.NewRequest(http.MethodPost, t.baseURL+"/api/v2/stream", pr)
 		if err != nil {
-			s.fail(err)
 			pr.CloseWithError(err)
+			s.fail(err)
 			return
 		}
 		t.setBrowserHeaders(req)
+		req.Header.Del("Accept-Encoding")
 		req.Header.Set("Content-Type", "application/octet-stream")
+		req.Header.Set("Transfer-Encoding", "chunked")
 		req.Header.Set("X-Session-Id", id)
 		req.ContentLength = -1
 		resp, err := t.httpClient.Do(req)
@@ -171,7 +185,9 @@ func (t *Transport) startSession() (*muxSession, error) {
 		resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			s.fail(fmt.Errorf("stream uplink status %d", resp.StatusCode))
+			return
 		}
+		s.close()
 	}()
 
 	return s, nil
@@ -261,7 +277,6 @@ func (s *muxSession) deliver(connID uint32, data []byte) {
 	select {
 	case p.ch <- data:
 	case <-p.closed:
-	default:
 	}
 }
 
