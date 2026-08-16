@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>obfs — PT Proxy wiki</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="layout">
+    <nav id="nav"></nav>
+    <main>
+      <h1>obfs2, obfs3, obfs4</h1>
+      <p>Obfuscated TCP transports (the same family Tor uses as pluggable transports). Traffic looks like random bytes after a handshake. obfs4 uses a cert/key pair; IAT mode is always <code>0</code>.</p>
+
+      <h2>Capabilities</h2>
+      <ul>
+        <li>Forward and reverse pipes (TCP + UDP inside a mux session)</li>
+        <li>A raw TCP splice to <code>target</code> for clients that do not mux (including Tor to an ORPort behind <code>external</code>)</li>
+        <li>obfs4 identity persisted in config.json (or printed with <code>-gencert</code>)</li>
+      </ul>
+
+      <h2>Config</h2>
+      <p><strong>Server:</strong> <code>listen</code> (default <code>0.0.0.0:3334</code>), optional <code>target</code>, obfs4 <code>cert</code> and <code>private-key</code> (created on first run if empty).</p>
+      <p><strong>Client:</strong> <code>address</code> host:port, obfs4 <code>cert</code>, <code>listen</code> (local in forward, published on the server in reverse), optional <code>reverse-tag</code>.</p>
+
+      <h2>How it works</h2>
+      <p>Server accepts TCP, completes the obfs handshake, then either starts a mux session (<code>PTPXMUX1</code> + smux) or splices raw TCP to <code>target</code>. Client dials with <code>cert</code> and <code>iat-mode=0</code>, then muxes: local TCP+UDP listen in forward, or a reverse bind request plus dials to the tagged service. Sessions reconnect if the link drops; the local listen stays up in forward mode.</p>
+      <p>obfs4 <code>cert</code> is base64 of node ID + ntor public key (padding stripped). Private key is hex. A new length-obfuscation seed is drawn each start.</p>
+    </main>
+  </div>
+  <script src="nav.js"></script>
+</body>
+</html>

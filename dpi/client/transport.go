@@ -59,6 +59,8 @@ type Transport struct {
 	sessMu   sync.Mutex
 	sessions []*muxSession
 	active   int32 // pinned logical flows across sessions
+
+	ReverseLocal string
 }
 
 // NewTransport creates a transport to the server.
@@ -408,5 +410,48 @@ func (sr *streamReader) Read(p []byte) (int, error) {
 }
 
 func (sr *streamReader) Close() error {
-	return sr.resp.Body.Close()
+	if sr.resp != nil && sr.resp.Body != nil {
+		return sr.resp.Body.Close()
+	}
+	return nil
+}
+
+func (t *Transport) SendReverseBind(listen string) error {
+	sess, err := t.pickSession()
+	if err != nil {
+		return err
+	}
+	plain := t.buildPlain(common.MsgReverseBind, 0, []byte(listen))
+	encrypted, err := t.encryptor.Encrypt(plain)
+	if err != nil {
+		return err
+	}
+	if err := sess.writeEncrypted(encrypted); err != nil {
+		_, _, err = t.doPost(t.baseURL+"/.well-known/cdn-cache/upload", encrypted, true)
+		return err
+	}
+	return nil
+}
+
+func (t *Transport) handleReverseOpen(connID uint32) {
+	if t.ReverseLocal == "" {
+		return
+	}
+	local, err := net.Dial("tcp", t.ReverseLocal)
+	if err != nil {
+		t.log.Error("reverse dial:", err)
+		_ = t.CloseConn(connID)
+		return
+	}
+	defer local.Close()
+	tunnel, err := newTunnelConn(t, connID, t.log, false)
+	if err != nil {
+		local.Close()
+		return
+	}
+	defer tunnel.Close()
+	errCh := make(chan error, 2)
+	go func() { _, err := io.Copy(tunnel, local); errCh <- err }()
+	go func() { _, err := io.Copy(local, tunnel); errCh <- err }()
+	<-errCh
 }

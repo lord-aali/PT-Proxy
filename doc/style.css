@@ -1,0 +1,48 @@
+:root {
+  --bg: #0f1419;
+  --panel: #1a2332;
+  --border: #2a3a4f;
+  --text: #e7eef7;
+  --muted: #8aa0b8;
+  --link: #7eb8ff;
+  --accent: #3d8bfd;
+  --code: #0b1016;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font: 16px/1.55 system-ui, Segoe UI, sans-serif; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.layout { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
+nav {
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: 1.25rem 1rem 2rem;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: auto;
+}
+nav h1 { font-size: 1.05rem; margin: 0 0 0.25rem; }
+nav .sub { color: var(--muted); font-size: 0.8rem; margin-bottom: 1.25rem; }
+nav .group { color: var(--muted); font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; margin: 1.1rem 0 0.4rem; }
+nav a { display: block; padding: 0.28rem 0.45rem; border-radius: 6px; color: var(--text); }
+nav a:hover, nav a.active { background: #243044; text-decoration: none; }
+main { padding: 2rem 2.5rem 4rem; max-width: 860px; }
+h1, h2, h3 { line-height: 1.25; }
+h1 { font-size: 1.85rem; margin-top: 0; }
+h2 { font-size: 1.25rem; margin-top: 2rem; border-bottom: 1px solid var(--border); padding-bottom: 0.35rem; }
+h3 { font-size: 1.05rem; margin-top: 1.4rem; }
+p, li { color: #d5e0ec; }
+.muted { color: var(--muted); }
+code, pre { font-family: ui-monospace, Consolas, monospace; font-size: 0.86rem; }
+code { background: var(--code); padding: 0.12rem 0.35rem; border-radius: 4px; }
+pre { background: var(--code); border: 1px solid var(--border); padding: 0.9rem 1rem; border-radius: 8px; overflow: auto; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+th, td { border: 1px solid var(--border); padding: 0.45rem 0.6rem; text-align: left; vertical-align: top; }
+th { background: var(--panel); }
+.note { background: #1c2a22; border: 1px solid #2f4a3a; padding: 0.75rem 1rem; border-radius: 8px; }
+@media (max-width: 800px) {
+  .layout { grid-template-columns: 1fr; }
+  nav { position: relative; height: auto; }
+}

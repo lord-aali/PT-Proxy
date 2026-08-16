@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Config &amp; tags — PT Proxy wiki</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="layout">
+    <nav id="nav"></nav>
+    <main>
+      <h1>Config and tags</h1>
+      <p>JSON with two optional arrays: <code>server</code> and <code>client</code>. Path is <code>-c</code> (default <code>./config.json</code>). Working directory is <code>-d</code>.</p>
+<pre><code>{
+  "server": [ { "type": "socks", "listen": "127.0.0.1:0", "tag": "exit" } ],
+  "client": [ { "type": "obfs4", "listen": "127.0.0.1:1080", "address": "1.2.3.4:3334", "cert": "..." } ]
+}</code></pre>
+
+      <h2>Fields</h2>
+      <table>
+        <tr><th>Field</th><th>On</th><th>Meaning</th></tr>
+        <tr><td><code>type</code></td><td>every block</td><td>socks, http, external, obfs2/3/4, dpi, snowflake, ftp</td></tr>
+        <tr><td><code>tag</code></td><td>every block</td><td>Name used by <code>target</code> and <code>reverse-tag</code>. If omitted: <code>type-port</code> after bind. Port <code>0</code> uses the assigned port. DPI uses the HTTPS port if set, else HTTP.</td></tr>
+        <tr><td><code>listen</code></td><td>most blocks</td><td>Bind address. For <strong>external</strong>, the address to dial.</td></tr>
+        <tr><td><code>target</code></td><td>tunnel server</td><td>Tag of the service to reach. Empty: this tunnel accepts reverse binds from clients.</td></tr>
+        <tr><td><code>reverse-tag</code></td><td>tunnel client</td><td>Tag of a service in this file’s <code>server</code> list. Set: reverse; <code>listen</code> is published on the tunnel server. Empty: forward; <code>listen</code> is local.</td></tr>
+        <tr><td><code>address</code></td><td>tunnel client</td><td>Tunnel server (host:port or URL).</td></tr>
+      </table>
+      <p>TCP and UDP share the same <code>host:port</code>. There is no protocol field in JSON. An <code>http</code> target is TCP-only.</p>
+
+      <h2>Defaults</h2>
+      <table>
+        <tr><th>Block</th><th>Default</th></tr>
+        <tr><td>socks</td><td><code>listen</code> <code>127.0.0.1:0</code>. Optional <code>user</code>/<code>pass</code>.</td></tr>
+        <tr><td>http</td><td><code>listen</code> <code>127.0.0.1:0</code></td></tr>
+        <tr><td>external</td><td><code>listen</code> required</td></tr>
+        <tr><td>obfs server</td><td><code>0.0.0.0:3334</code>. obfs4 cert/key generated on first run if empty (<code>-gencert</code> prints a pair).</td></tr>
+        <tr><td>dpi server</td><td><code>https</code> <code>0.0.0.0:443</code>, <code>enc-key</code> <code>change-me-shared-key</code>, <code>protocol</code> <code>auto</code></td></tr>
+        <tr><td>snowflake server</td><td><code>0.0.0.0:8080</code></td></tr>
+        <tr><td>ftp server</td><td><code>0.0.0.0:21</code>, user <code>tunnel</code>, pass <code>secret</code>, key <code>change-me-please</code>, data ports <code>8080</code>/<code>8081</code></td></tr>
+        <tr><td>tunnel client <code>listen</code></td><td><code>127.0.0.1:1080</code></td></tr>
+        <tr><td>client <code>address</code></td><td>obfs <code>127.0.0.1:3334</code>, dpi <code>https://127.0.0.1:443</code>, snowflake <code>ws://127.0.0.1:8080/</code>, ftp <code>127.0.0.1:21</code></td></tr>
+      </table>
+      <p>DPI client: <code>uplink</code> <code>post-async</code>, <code>redirect-follow</code> true. Reverse DPI uses <code>uplink</code> <code>stream</code>.</p>
+
+      <h2>Startup</h2>
+      <ol>
+        <li>Start <code>socks</code> / <code>http</code> / <code>external</code> in <code>server</code>, assign ports, register tags.</li>
+        <li>Start tunnel servers. Unknown <code>target</code> tags fail that entry.</li>
+        <li>Start tunnel clients. Unknown <code>reverse-tag</code> is logged and that client is skipped.</li>
+      </ol>
+      <p>Log tags look like <code>[obfs4-3334]</code> or <code>[socks-49152]</code>.</p>
+    </main>
+  </div>
+  <script src="nav.js"></script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>socks — PT Proxy wiki</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="layout">
+    <nav id="nav"></nav>
+    <main>
+      <h1>socks</h1>
+      <p>A SOCKS5 proxy this process listens for. Use it as a tunnel <code>target</code> (exit on the server) or as a <code>reverse-tag</code> (proxy on the client, published on the far side).</p>
+<pre><code>{ "type": "socks", "listen": "127.0.0.1:0", "tag": "exit" }</code></pre>
+
+      <h2>Capabilities</h2>
+      <ul>
+        <li>SOCKS5 CONNECT (TCP) to any destination the host can reach</li>
+        <li>UDP ASSOCIATE on the <strong>same</strong> port as TCP</li>
+        <li>Optional username/password (<code>user</code> / <code>pass</code>)</li>
+        <li>Port <code>0</code> — OS assigns a free port; the tag includes that port if you omit <code>tag</code></li>
+      </ul>
+      <p>Applications speak SOCKS5 to whatever address reaches this daemon (often the tunnel client’s <code>listen</code> in forward mode, or the reverse bind on the VPS).</p>
+
+      <h2>How it works</h2>
+      <p>TCP: standard SOCKS5 server. UDP: packets with a SOCKS5 UDP header are decoded, sent to the destination, and replies are wrapped and returned to that client. ASSOCIATE reports the listen IP so apps can send datagrams to this port.</p>
+    </main>
+  </div>
+  <script src="nav.js"></script>
+</body>
+</html>

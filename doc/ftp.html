@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FTP — PT Proxy wiki</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="layout">
+    <nav id="nav"></nav>
+    <main>
+      <h1>FTP tunnel</h1>
+      <p>An FTP/FTPS control connection plus persistent PASV data sockets. Control looks like FTP; data files look like website assets. Encrypted frame batches ride STOR/RETR.</p>
+
+      <h2>Capabilities</h2>
+      <ul>
+        <li>Forward and reverse (TCP + UDP)</li>
+        <li>Plain FTP or FTPS (TLS on control and data)</li>
+        <li>Several parallel upload and download channels</li>
+        <li>Optional decoy LIST/RETR cover traffic</li>
+        <li>PASV IP and port ranges for NAT; optional override addresses on the client</li>
+      </ul>
+
+      <h2>Config</h2>
+      <p><strong>Server:</strong> <code>listen</code> (default <code>0.0.0.0:21</code>), <code>user</code> / <code>pass</code>, <code>enc-key</code>, <code>pasv-ip</code>, <code>upload-ports</code> / <code>download-ports</code>, optional TLS files, optional <code>target</code>.</p>
+      <p><strong>Client:</strong> <code>address</code> FTP host:port, same credentials and key, <code>listen</code>, channel counts, optional PASV overrides, <code>decoy</code>, <code>reverse-tag</code>.</p>
+
+      <h2>How it works</h2>
+      <p>Login, PASV, then long-lived data connections named with a session token. Frames: ConnID, type, seq, data; batches sealed with AES-256-GCM (key = SHA-256 of the passphrase).</p>
+      <table>
+        <tr><th>Type</th><th>ID</th><th>Capability</th></tr>
+        <tr><td>Data</td><td>0x01</td><td>TCP payload (seq-reordered)</td></tr>
+        <tr><td>Open</td><td>0x02</td><td>TCP to an address, or UDP; server may always dial <code>target</code></td></tr>
+        <tr><td>Close / Ack / heartbeat</td><td>0x03–0x06</td><td>Lifecycle</td></tr>
+        <tr><td>UDP data</td><td>0x07</td><td>Address + payload</td></tr>
+        <tr><td>DNS</td><td>0x08 / 0x09</td><td>DNS request/response</td></tr>
+        <tr><td>Hello</td><td>0x0A</td><td>Session start</td></tr>
+        <tr><td>ReverseBind / ReverseOpen</td><td>0x0B / 0x0C</td><td>Publish a port on the server; incoming TCP becomes a connID</td></tr>
+      </table>
+    </main>
+  </div>
+  <script src="nav.js"></script>
+</body>
+</html>

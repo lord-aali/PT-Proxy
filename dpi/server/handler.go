@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lord-aali/PT-Proxy/common/dualbind"
 	"github.com/lord-aali/PT-Proxy/dpi/common"
 )
 
@@ -174,6 +175,12 @@ func (h *tunnelHandler) dispatchPlain(w http.ResponseWriter, decrypted []byte, s
 	payload = payload[:hdr.PayloadLen]
 
 	switch hdr.MsgType {
+	case common.MsgReverseBind:
+		listen := string(payload)
+		go h.runReverse(listen)
+		if writeHTTP && w != nil {
+			w.Write([]byte(`{"status":"ok"}`))
+		}
 	case common.MsgConnect:
 		req, err := common.DecodeConnectRequest(payload)
 		if err != nil {
@@ -218,10 +225,26 @@ func (h *tunnelHandler) dispatchPlain(w http.ResponseWriter, decrypted []byte, s
 }
 
 func (h *tunnelHandler) handleConnect(w http.ResponseWriter, connID uint32, req *common.ConnectRequest, sessionID string, writeHTTP bool) {
+	dialAddr := req.Address
+	if ext := strings.TrimSpace(h.server.cfg.Target); ext != "" {
+		dialAddr = ext
+		if req.Network == "udp" && h.server.cfg.SkipUDP {
+			h.server.log.Error("http target is TCP-only; ignoring UDP")
+			if writeHTTP && w != nil {
+				w.Write([]byte(`{"status":"error","msg":"udp not supported in external mode"}`))
+			}
+			if sessionID != "" {
+				sess := h.server.getOrCreateSession(sessionID)
+				plain := common.BuildStreamHeader(common.MsgClose, connID, 0)
+				_ = sess.writeFrame(h.server.encryptor, plain)
+			}
+			return
+		}
+	}
 	dialer := &net.Dialer{Timeout: dialTimeout}
-	remote, err := dialer.Dial(req.Network, req.Address)
+	remote, err := dialer.Dial(req.Network, dialAddr)
 	if err != nil {
-		h.server.log.Error("Dial", req.Network, req.Address+":", err)
+		h.server.log.Error("Dial", req.Network, dialAddr+":", err)
 		if writeHTTP && w != nil {
 			w.Write([]byte(`{"status":"error","msg":"connect failed"}`))
 		}
@@ -242,7 +265,7 @@ func (h *tunnelHandler) handleConnect(w http.ResponseWriter, connID uint32, req 
 		connID:     connID,
 		remote:     remote,
 		server:     h.server,
-		targetAddr: req.Address,
+		targetAddr: dialAddr,
 		dataCh:     make(chan []byte, 16),
 		session:    sess,
 	}
@@ -403,4 +426,91 @@ type clientConn struct {
 	targetAddr string
 	dataCh     chan []byte
 	session    *muxSession
+}
+
+func (s *Server) firstSession() *muxSession {
+	s.sessLock.RLock()
+	defer s.sessLock.RUnlock()
+	for _, sess := range s.sessions {
+		return sess
+	}
+	return nil
+}
+
+func (h *tunnelHandler) runReverse(listen string) {
+	ln, udp, bound, err := dualbind.Listen(listen)
+	if err != nil {
+		h.server.log.Error("reverse bind:", err)
+		return
+	}
+	h.server.log.Info("reverse listen", bound)
+	if udp != nil {
+		go h.reverseUDP(udp)
+	}
+	for {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		go h.attachReverseTCP(c)
+	}
+}
+
+func (h *tunnelHandler) attachReverseTCP(c net.Conn) {
+	connID := h.server.nextConnID.Add(1)
+	sess := h.server.firstSession()
+	if sess == nil {
+		c.Close()
+		return
+	}
+	cc := &clientConn{
+		connID:     connID,
+		remote:     c,
+		server:     h.server,
+		targetAddr: c.RemoteAddr().String(),
+		dataCh:     make(chan []byte, 16),
+		session:    sess,
+	}
+	h.server.registerClient(connID, cc)
+	plain := common.BuildStreamHeader(common.MsgReverseOpen, connID, 0)
+	_ = sess.writeFrame(h.server.encryptor, plain)
+	go func() {
+		defer h.server.unregisterClient(connID)
+		defer c.Close()
+		buf := make([]byte, 32*1024)
+		for {
+			n, err := c.Read(buf)
+			if n > 0 {
+				data := make([]byte, n)
+				copy(data, buf[:n])
+				p := append(common.BuildStreamHeader(common.MsgData, connID, uint32(len(data))), data...)
+				if err := sess.writeFrame(h.server.encryptor, p); err != nil {
+					return
+				}
+			}
+			if err != nil {
+				plain := common.BuildStreamHeader(common.MsgClose, connID, 0)
+				_ = sess.writeFrame(h.server.encryptor, plain)
+				return
+			}
+		}
+	}()
+}
+
+func (h *tunnelHandler) reverseUDP(pc *net.UDPConn) {
+	buf := make([]byte, 65535)
+	for {
+		n, from, err := pc.ReadFromUDP(buf)
+		if err != nil {
+			return
+		}
+		sess := h.server.firstSession()
+		if sess == nil {
+			continue
+		}
+		payload := append([]byte(from.String()+"\x00"), buf[:n]...)
+		plain := append(common.BuildStreamHeader(common.MsgUDPPacket, 0, uint32(len(payload))), payload...)
+		_ = sess.writeFrame(h.server.encryptor, plain)
+		_ = from
+	}
 }

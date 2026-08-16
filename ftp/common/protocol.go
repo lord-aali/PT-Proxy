@@ -16,16 +16,18 @@ import (
 // ─── Frame types ──────────────────────────────────────────────────────────────
 
 const (
-	TypeData    byte = 0x01
-	TypeOpen    byte = 0x02
-	TypeClose   byte = 0x03
-	TypeAck     byte = 0x04
-	TypeHB      byte = 0x05
-	TypeHBAck   byte = 0x06
-	TypeUDPData byte = 0x07
-	TypeDNSReq  byte = 0x08
-	TypeDNSResp byte = 0x09
-	TypeHello   byte = 0x0A
+	TypeData        byte = 0x01
+	TypeOpen        byte = 0x02
+	TypeClose       byte = 0x03
+	TypeAck         byte = 0x04
+	TypeHB          byte = 0x05
+	TypeHBAck       byte = 0x06
+	TypeUDPData     byte = 0x07
+	TypeDNSReq      byte = 0x08
+	TypeDNSResp     byte = 0x09
+	TypeHello       byte = 0x0A
+	TypeReverseBind byte = 0x0B
+	TypeReverseOpen byte = 0x0C
 )
 
 const (

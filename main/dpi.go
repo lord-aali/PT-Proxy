@@ -16,15 +16,12 @@ import (
 )
 
 const (
-	dpiDefaultEncKey      = "default-encryption-key-change-me"
-	dpiDefaultProtocol    = "auto"
-	dpiDefaultUplink      = "post-async"
-	dpiDefaultSocksAddr   = "127.0.0.1:1080"
-	dpiDefaultDnsUpstream = "1.1.1.1:53"
-	dpiDefaultDnsNetwork  = "tcp"
+	dpiDefaultEncKey    = "default-encryption-key-change-me"
+	dpiDefaultProtocol  = "auto"
+	dpiDefaultUplink    = "post-async"
+	dpiDefaultSocksAddr = "127.0.0.1:1080"
 )
 
-// dpiOrDefault returns value if it is non-blank, otherwise fallback.
 func dpiOrDefault(value, fallback string) string {
 	if strings.TrimSpace(value) == "" {
 		return fallback
@@ -32,10 +29,7 @@ func dpiOrDefault(value, fallback string) string {
 	return value
 }
 
-// launchDpiServer starts a dpi HTTP/HTTPS tunnel server from a config entry.
-// It returns true once the listeners are up; the dpi server manages its own
-// listeners internally, so none are surfaced to the terminal monitor.
-func launchDpiServer(c configuration.JsonServerConfigImpl, tag string) bool {
+func launchDpiServer(c configuration.JsonServerConfigImpl, tag, target string, skipUDP bool) bool {
 	lg := ptlog.PTLog{LogTag: tag}
 
 	cfg := DpiServer.Config{
@@ -51,6 +45,8 @@ func launchDpiServer(c configuration.JsonServerConfigImpl, tag string) bool {
 		CertDir:       c.CertDir,
 		Protocol:      dpiOrDefault(c.Protocol, dpiDefaultProtocol),
 		LogTag:        tag,
+		Target:        target,
+		SkipUDP:       skipUDP,
 	}
 
 	if cfg.HTTPAddr == "" && cfg.HTTPSAddr == "" {
@@ -75,10 +71,9 @@ func launchDpiServer(c configuration.JsonServerConfigImpl, tag string) bool {
 	return true
 }
 
-// launchDpiClient starts a dpi client's SOCKS5 and/or HTTP CONNECT proxy that
-// tunnels to a dpi server over HTTP(S).
-func launchDpiClient(c configuration.JsonClientConfigImpl, tag string) bool {
+func launchDpiClient(c configuration.JsonClientConfigImpl, tag, reverseAddr string, skipUDP bool) bool {
 	lg := ptlog.PTLog{LogTag: tag}
+	_ = skipUDP
 
 	if strings.TrimSpace(c.Address) == "" {
 		lg.Error("dpi client requires a server address (URL)")
@@ -95,9 +90,6 @@ func launchDpiClient(c configuration.JsonClientConfigImpl, tag string) bool {
 	if err != nil {
 		lg.Error("dpi client resolve server IP failed:", err)
 		return false
-	}
-	if net.ParseIP(u.Hostname()) == nil {
-		lg.Info("Resolved", u.Hostname(), "->", dialIP)
 	}
 
 	encryptor, err := DpiCommon.NewEncryptor([]byte(dpiOrDefault(c.EncKey, dpiDefaultEncKey)))
@@ -122,6 +114,9 @@ func launchDpiClient(c configuration.JsonClientConfigImpl, tag string) bool {
 	}
 
 	uplink := dpiOrDefault(c.Uplink, dpiDefaultUplink)
+	if reverseAddr != "" && uplink != DpiCommon.UplinkStream {
+		uplink = DpiCommon.UplinkStream
+	}
 	transport, err := DpiClient.NewTransport(DpiClient.TransportConfig{
 		ServerURL:       c.Address,
 		Encryptor:       encryptor,
@@ -138,31 +133,29 @@ func launchDpiClient(c configuration.JsonClientConfigImpl, tag string) bool {
 		return false
 	}
 
-	socksAddr := c.Listen
-	if socksAddr == "" && c.HttpProxyAddr == "" {
-		socksAddr = dpiDefaultSocksAddr
+	socksAddr := dpiOrDefault(c.Listen, dpiDefaultSocksAddr)
+	proxy := DpiClient.NewProxyServer(DpiClient.ProxyConfig{
+		Transport: transport,
+		SOCKSAddr: socksAddr,
+		Verbose:   c.Verbose,
+		LogTag:    tag,
+	})
+	if reverseAddr != "" {
+		if err := proxy.RunReverse(c.Listen, reverseAddr); err != nil {
+			lg.Error("dpi reverse:", err)
+			return false
+		}
+		lg.InfoDelayed(time.Second, "dpi reverse", c.Listen, "->", reverseAddr)
+		return true
 	}
-
-	proxyCfg := DpiClient.ProxyConfig{
-		Transport:   transport,
-		SOCKSAddr:   socksAddr,
-		HTTPAddr:    c.HttpProxyAddr,
-		DNSUpstream: dpiOrDefault(c.DnsUpstream, dpiDefaultDnsUpstream),
-		DNSNetwork:  dpiOrDefault(c.DnsNetwork, dpiDefaultDnsNetwork),
-		Verbose:     c.Verbose,
-		LogTag:      tag,
-	}
-
-	proxy := DpiClient.NewProxyServer(proxyCfg)
-	if err := proxy.Run(); err != nil {
-		lg.Error("dpi client proxy run failed:", err)
+	if err := proxy.RunTCP(); err != nil {
+		lg.Error("dpi client listen failed:", err)
 		return false
 	}
-	lg.InfoDelayed(time.Second, "Client started listening on (socks:", dpiOrDefault(socksAddr, "-"), "http-proxy:", dpiOrDefault(c.HttpProxyAddr, "-")+")")
+	lg.InfoDelayed(time.Second, "dpi client listening", socksAddr)
 	return true
 }
 
-// resolveServerIP returns the dial IP for the server hostname in address.
 func resolveServerIP(u *url.URL) (string, error) {
 	host := u.Hostname()
 	if host == "" {
@@ -174,7 +167,6 @@ func resolveServerIP(u *url.URL) (string, error) {
 		}
 		return ip.String(), nil
 	}
-
 	ips, err := net.LookupIP(host)
 	if err != nil {
 		return "", fmt.Errorf("lookup %s: %w", host, err)

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>http — PT Proxy wiki</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="layout">
+    <nav id="nav"></nav>
+    <main>
+      <h1>http</h1>
+      <p>An HTTP proxy this process listens for. Typical use: browser or OS “HTTP proxy” pointed at a tunnel client <code>listen</code>, with this block as the tunnel server’s <code>target</code>.</p>
+<pre><code>{ "type": "http", "listen": "127.0.0.1:0", "tag": "webexit" }</code></pre>
+
+      <h2>Capabilities</h2>
+      <ul>
+        <li>HTTP CONNECT — HTTPS and other TCP through the proxy</li>
+        <li>Plain HTTP — one request/response to <code>Host</code> (port 80 if omitted)</li>
+        <li>Port <code>0</code> for an ephemeral listen</li>
+      </ul>
+      <p>TCP only. Tunnels that target this tag do not carry UDP to it.</p>
+
+      <h2>How it works</h2>
+      <p>CONNECT: dial the requested host, respond <code>200 Connection Established</code>, copy both ways. Other methods: dial the origin, write the request, copy the response. Failed dials return 502.</p>
+    </main>
+  </div>
+  <script src="nav.js"></script>
+</body>
+</html>

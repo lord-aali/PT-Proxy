@@ -7,21 +7,16 @@ import (
 	"time"
 
 	"github.com/lord-aali/PT-Proxy/common/configuration"
+	"github.com/lord-aali/PT-Proxy/common/dualbind"
+	"github.com/lord-aali/PT-Proxy/common/muxpipe"
 	"github.com/lord-aali/PT-Proxy/common/ptlog"
-	SfSocks5 "github.com/lord-aali/PT-Proxy/snowflake/common/socks5"
 	SfStandalone "github.com/lord-aali/PT-Proxy/snowflake/common/standalone"
 	SfWsConn "github.com/lord-aali/PT-Proxy/snowflake/common/websocketconn"
 )
 
-const (
-	snowflakeDefaultWsListen = "0.0.0.0:8080"
-	snowflakeDefaultSocks    = "127.0.0.1:0"
-)
+const snowflakeDefaultWsListen = "0.0.0.0:8080"
 
-// launchSnowflakeServer starts a standalone snowflake WebSocket relay with a
-// local SOCKS5 exit, from a config entry. The server manages its own listeners
-// internally, so none are surfaced to the terminal monitor.
-func launchSnowflakeServer(c configuration.JsonServerConfigImpl, tag string) bool {
+func launchSnowflakeServer(c configuration.JsonServerConfigImpl, tag, target string, skipUDP bool) bool {
 	lg := ptlog.PTLog{LogTag: tag}
 
 	wsAddr := dpiOrDefault(c.Listen, snowflakeDefaultWsListen)
@@ -36,14 +31,8 @@ func launchSnowflakeServer(c configuration.JsonServerConfigImpl, tag string) boo
 		lg.Error("snowflake server init failed:", err)
 		return false
 	}
-
-	socksLn, err := net.Listen("tcp", dpiOrDefault(c.SocksBind, snowflakeDefaultSocks))
-	if err != nil {
-		lg.Error("snowflake server socks listen failed:", err)
-		return false
-	}
-	srv.ServerSocksAddr = socksLn.Addr().String()
-	go serveSnowflakeSOCKS(socksLn, lg)
+	srv.Target = target
+	srv.SkipUDP = skipUDP
 
 	useTLS := c.TlsCertFile != "" && c.TlsKeyFile != ""
 	go func() {
@@ -63,48 +52,11 @@ func launchSnowflakeServer(c configuration.JsonServerConfigImpl, tag string) boo
 	if useTLS {
 		scheme = "wss"
 	}
-	lg.Info("Server started listening ("+scheme+"://"+wsAddr+"/ socks exit:", srv.ServerSocksAddr+")")
+	lg.Info("Server started listening (" + scheme + "://" + wsAddr + "/)")
 	return true
 }
 
-// serveSnowflakeSOCKS is the server's local SOCKS5 exit loop: it accepts a
-// SOCKS5 CONNECT from the tunnel and bridges it to the real destination.
-func serveSnowflakeSOCKS(ln net.Listener, lg ptlog.PTLog) {
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			if ne, ok := err.(net.Error); ok && ne.Temporary() {
-				continue
-			}
-			lg.Error("snowflake socks accept:", err)
-			return
-		}
-		go func(c net.Conn) {
-			target, err := SfSocks5.HandshakeServer(c)
-			if err != nil {
-				c.Close()
-				return
-			}
-			remote, err := net.Dial(target.Network, target.Addr())
-			if err != nil {
-				_ = SfSocks5.ReplyConnectFailed(c)
-				c.Close()
-				return
-			}
-			if err := SfSocks5.ReplyConnectSuccess(c); err != nil {
-				remote.Close()
-				c.Close()
-				return
-			}
-			SfStandalone.CopyLoop(c, remote)
-			remote.Close()
-		}(conn)
-	}
-}
-
-// launchSnowflakeClient connects to a standalone snowflake server over
-// WebSocket and exposes a local SOCKS5 proxy (and optional tunnel forward).
-func launchSnowflakeClient(c configuration.JsonClientConfigImpl, tag string) bool {
+func launchSnowflakeClient(c configuration.JsonClientConfigImpl, tag, reverseAddr string, skipUDP bool) bool {
 	lg := ptlog.PTLog{LogTag: tag}
 
 	if c.Address == "" {
@@ -114,9 +66,6 @@ func launchSnowflakeClient(c configuration.JsonClientConfigImpl, tag string) boo
 
 	skipTLSVerify := c.Insecure
 	wsDialer := SfStandalone.WebSocketDialer(c.Proxy, skipTLSVerify)
-
-	// SNI override for wss:// (SNI camouflage / domain fronting). Fall back to
-	// front-host when sni is unset so the Host header and ServerName match.
 	serverName := c.Sni
 	if serverName == "" {
 		serverName = c.FrontHost
@@ -132,14 +81,10 @@ func launchSnowflakeClient(c configuration.JsonClientConfigImpl, tag string) boo
 			wsDialer.TLSClientConfig.InsecureSkipVerify = true
 		}
 	}
-
-	// Optional custom Host header. gorilla/websocket maps the "Host" header key
-	// onto the request Host, which enables domain fronting.
 	wsHeader := http.Header{}
 	if c.FrontHost != "" {
 		wsHeader.Set("Host", c.FrontHost)
 	}
-
 	dialWS := func() (net.Conn, error) {
 		ws, _, err := wsDialer.Dial(c.Address, wsHeader)
 		if err != nil {
@@ -154,26 +99,24 @@ func launchSnowflakeClient(c configuration.JsonClientConfigImpl, tag string) boo
 		return false
 	}
 
-	socksAddr, err := SfStandalone.ServeLocalSOCKS(dpiOrDefault(c.Listen, snowflakeDefaultSocks), sess)
-	if err != nil {
-		lg.Error("snowflake client local socks failed:", err)
-		return false
-	}
-
-	if c.ForwardBind != "" {
-		forwardAddr, err := SfStandalone.ServeTunnelForward(c.ForwardBind, sess)
+	if reverseAddr != "" {
+		bound, err := muxpipe.RequestReverseBind(sess, c.Listen)
 		if err != nil {
-			lg.Error("snowflake client tunnel forward failed:", err)
+			lg.Error("snowflake reverse bind:", err)
 			return false
 		}
-		lg.InfoDelayed(time.Second, "Client started listening (socks:", socksAddr.String(), "tunneled-server-socks:", forwardAddr.String()+")")
+		lg.InfoDelayed(time.Second, "snowflake reverse on", bound, "->", reverseAddr)
+		go muxpipe.RunReverseClient(sess, reverseAddr, skipUDP)
 		return true
 	}
 
-	if skipTLSVerify {
-		lg.InfoDelayed(time.Second, "Client started listening (socks:", socksAddr.String(), "tls: skip-verify)")
-	} else {
-		lg.InfoDelayed(time.Second, "Client started listening (socks:", socksAddr.String()+")")
+	listen := dpiOrDefault(c.Listen, "127.0.0.1:1080")
+	ln, udp, bound, err := dualbind.Listen(listen)
+	if err != nil {
+		lg.Error("snowflake listen:", err)
+		return false
 	}
+	lg.InfoDelayed(time.Second, "snowflake client listening", bound)
+	go muxpipe.RunForwardClient(sess, ln, udp)
 	return true
 }

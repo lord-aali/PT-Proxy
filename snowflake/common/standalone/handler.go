@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/lord-aali/PT-Proxy/common/muxpipe"
 	"github.com/lord-aali/PT-Proxy/snowflake/common/encapsulation"
 	"github.com/lord-aali/PT-Proxy/snowflake/common/turbotunnel"
 	"github.com/lord-aali/PT-Proxy/snowflake/common/websocketconn"
@@ -30,9 +31,8 @@ type Server struct {
 	pconn        *turbotunnel.QueuePacketConn
 	smuxSessions map[turbotunnel.ClientID]*smux.Session
 	smuxMu       sync.RWMutex
-	// ServerSocksAddr is the loopback address of the server SOCKS listener
-	// (for StreamForward).
-	ServerSocksAddr string
+	Target       string
+	SkipUDP      bool
 }
 
 // NewServer creates a standalone snowflake server.
@@ -98,8 +98,7 @@ func (s *Server) acceptSmux(conn *kcp.UDPSession) {
 		}()
 	}
 
-	cfg := SessionConfig{ServerForwardSocks: s.ServerSocksAddr}
-	RunStreamAcceptor(sess, cfg)
+	muxpipe.Serve(sess, s.Target, s.SkipUDP)
 }
 
 func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {

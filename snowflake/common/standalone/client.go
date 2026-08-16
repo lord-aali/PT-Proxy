@@ -31,6 +31,40 @@ func ServeLocalSOCKS(addr string, sess *smux.Session) (net.Addr, error) {
 	return ln.Addr(), nil
 }
 
+// ServeLocalTCP listens on addr and pipes each accepted TCP connection through
+// StreamClientDial (server dials external-service).
+func ServeLocalTCP(addr string, sess *smux.Session) (net.Addr, error) {
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				if ne, ok := err.(net.Error); ok && ne.Temporary() {
+					continue
+				}
+				log.Printf("TCP accept: %v", err)
+				return
+			}
+			go handleLocalTCP(conn, sess)
+		}
+	}()
+	return ln.Addr(), nil
+}
+
+func handleLocalTCP(conn net.Conn, sess *smux.Session) {
+	defer conn.Close()
+	stream, err := OpenClientDial(sess, socks5.Target{Network: "tcp", Host: "127.0.0.1", Port: 0})
+	if err != nil {
+		log.Printf("OpenClientDial: %v", err)
+		return
+	}
+	defer stream.Close()
+	CopyLoop(conn, stream)
+}
+
 func handleLocalSocks(conn net.Conn, sess *smux.Session) {
 	target, err := socks5.HandshakeServer(conn)
 	if err != nil {

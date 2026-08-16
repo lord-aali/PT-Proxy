@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PT Proxy wiki</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="layout">
+    <nav id="nav"></nav>
+    <main>
+      <h1>PT Proxy documentation</h1>
+      <p>PT Proxy is one binary and one JSON file. It runs camouflage tunnels and named services in the same process. The <code>server</code> array is listeners and backends this process owns. The <code>client</code> array is tunnels that connect out.</p>
+
+      <h2>Building blocks</h2>
+      <p><strong>Services</strong> are what applications talk to, or what the tunnel dials:</p>
+      <ul>
+        <li><a href="socks.html">socks</a> — SOCKS5, TCP CONNECT and UDP ASSOCIATE on one port</li>
+        <li><a href="http.html">http</a> — HTTP CONNECT proxy (TCP)</li>
+        <li><a href="external.html">external</a> — any existing <code>host:port</code> (TCP and/or UDP)</li>
+      </ul>
+      <p><strong>Tunnels</strong> carry those flows across a hostile network. Each one can run <a href="forward-reverse.html">forward</a> (local port → tagged service on the far side) or <a href="forward-reverse.html">reverse</a> (far-side port → tagged service on this machine).</p>
+      <ul>
+        <li><a href="obfs.html">obfs2 / obfs3 / obfs4</a> — obfuscated TCP, Tor-compatible handshake</li>
+        <li><a href="dpi.html">DPI</a> — encrypted HTTP/HTTPS</li>
+        <li><a href="snowflake.html">Snowflake</a> — WebSocket + KCP</li>
+        <li><a href="ftp.html">FTP</a> — FTP/FTPS façade with persistent data channels</li>
+      </ul>
+
+      <h2>Start here</h2>
+      <ol>
+        <li><a href="config.html">Config, tags, defaults</a></li>
+        <li><a href="forward-reverse.html">Forward and reverse</a></li>
+        <li><a href="muxpipe.html">Multiplexing (TCP + UDP inside the tunnel)</a></li>
+        <li>The page for the tunnel you use</li>
+      </ol>
+
+      <p class="muted">Build: <code>go build -o ptproxy ./main/</code> (Go 1.24+). Visual config: <code>config-builder.html</code>.</p>
+    </main>
+  </div>
+  <script src="nav.js"></script>
+</body>
+</html>

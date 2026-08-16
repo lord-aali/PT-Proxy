@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DPI — PT Proxy wiki</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="layout">
+    <nav id="nav"></nav>
+    <main>
+      <h1>DPI (HTTP/HTTPS tunnel)</h1>
+      <p>Carries TCP and UDP inside encrypted HTTP(S) requests so the session looks like ordinary web traffic. Good when only HTTPS (or a specific hostname) is allowed. Domain fronting: dial IP in <code>address</code>, set <code>sni</code> and <code>front-host</code> to the allowed name.</p>
+
+      <h2>Capabilities</h2>
+      <ul>
+        <li>Forward and reverse (TCP + UDP)</li>
+        <li>HTTP and/or HTTPS listeners; TLS from files, ACME, or a self-signed cert</li>
+        <li>Optional redirect for normal browsers hitting the same port</li>
+        <li>Two uplinks: many short POSTs (<code>post-async</code>, works behind CDNs) or one long upload + download (<code>stream</code>, typically faster on a direct server)</li>
+      </ul>
+
+      <h2>Config</h2>
+      <p><strong>Server:</strong> <code>http</code> / <code>https</code>, <code>enc-key</code>, TLS options, optional <code>redirect</code>, optional <code>target</code>.</p>
+      <p><strong>Client:</strong> <code>address</code> URL, <code>listen</code>, <code>enc-key</code>, optional <code>sni</code>, <code>front-host</code>, <code>insecure</code>, <code>uplink</code>, <code>reverse-tag</code>. Reverse uses <code>stream</code>.</p>
+
+      <h2>How it works</h2>
+      <p>Each flow has a <code>connID</code>. Messages are a 10-byte header (version, type, connID, payload length) then payload, encrypted. Stream uplink frames are length-prefixed. Paths such as <code>/.well-known/cdn-cache/</code>, <code>/api/v2/upload</code>, <code>/api/v2/stream</code>, and <code>/download/session/</code> carry the tunnel.</p>
+      <table>
+        <tr><th>Msg</th><th>ID</th><th>Capability</th></tr>
+        <tr><td>Connect</td><td>0x01</td><td>Open a flow; server dials <code>target</code> when set</td></tr>
+        <tr><td>Data / Close</td><td>0x02 / 0x03</td><td>Bytes and teardown</td></tr>
+        <tr><td>UDP</td><td>0x04 / 0x05</td><td>Datagrams (skipped for http targets)</td></tr>
+        <tr><td>ReverseBind / ReverseOpen</td><td>0x07 / 0x09</td><td>Publish a port on the server; incoming TCP becomes a new connID</td></tr>
+      </table>
+      <p>Forward: client binds TCP+UDP on <code>listen</code>, each TCP accept is a Connect, UDP shares one assoc. Reverse: client sends ReverseBind; server binds and pushes ReverseOpen; client dials the tagged service.</p>
+    </main>
+  </div>
+  <script src="nav.js"></script>
+</body>
+</html>

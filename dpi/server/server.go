@@ -34,6 +34,8 @@ type Config struct {
 	CertDir       string
 	Protocol      string
 	LogTag        string
+	Target        string // if set, every CONNECT/UDP is this address
+	SkipUDP       bool
 }
 
 // Server is the proxy server.

@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lord-aali/PT-Proxy/common/dualbind"
 	"github.com/lord-aali/PT-Proxy/common/ptlog"
 	"github.com/lord-aali/PT-Proxy/ftp/common"
 )
@@ -34,6 +35,7 @@ type Config struct {
 	SocksPass        string
 	Debug            bool
 	LogTag           string
+	ReverseAddr      string
 }
 
 var (
@@ -51,6 +53,7 @@ var (
 	cfgSocksUser string
 	cfgSocksPass string
 	cfgDebug     bool
+	cfgReverse   string
 
 	lg ptlog.PTLog
 )
@@ -512,6 +515,8 @@ func dispatch(f *common.Frame) {
 		}
 	case common.TypeHBAck:
 		lastHBAck.Store(time.Now().UnixNano())
+	case common.TypeReverseOpen:
+		go handleReverseOpen(f.ConnID)
 	}
 }
 
@@ -630,6 +635,72 @@ func decoyLoop(ctx context.Context) {
 
 // ─── SOCKS5 ───────────────────────────────────────────────────────────────────
 
+func handleReverseOpen(connID uint32) {
+	if cfgReverse == "" {
+		return
+	}
+	c, err := net.Dial("tcp", cfgReverse)
+	if err != nil {
+		lg.Error("reverse dial:", err)
+		return
+	}
+	pipeExisting(c, connID, "", false)
+}
+
+func serveTCPForward(ctx context.Context, addr string) error {
+	ln, udp, bound, err := dualbind.Listen(addr)
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
+	}
+	lg.InfoDelayed(time.Second, fmt.Sprintf("Client listening %s", bound))
+	go func() {
+		<-ctx.Done()
+		ln.Close()
+		if udp != nil {
+			udp.Close()
+		}
+	}()
+	if udp != nil {
+		go handleUDPRaw(udp)
+	}
+	for {
+		c, err := ln.Accept()
+		if err != nil {
+			select {
+			case <-ctx.Done():
+				return nil
+			default:
+				return err
+			}
+		}
+		go handleTCPForward(c)
+	}
+}
+
+func handleUDPRaw(pc *net.UDPConn) {
+	buf := make([]byte, 65535)
+	id := atomic.AddUint32(&connIDGen, 1)
+	sendNow(&common.Frame{ConnID: id, Type: common.TypeOpen, Data: []byte("udp://")})
+	var last *net.UDPAddr
+	go func() {
+		// replies arrive as TypeUDPData on this id via existing handler
+		_ = last
+	}()
+	for {
+		n, from, err := pc.ReadFromUDP(buf)
+		if err != nil {
+			return
+		}
+		last = from
+		sendNow(&common.Frame{ConnID: id, Type: common.TypeUDPData, Data: common.EncodeUDPData(from.String(), buf[:n])})
+	}
+}
+
+func handleTCPForward(conn net.Conn) {
+	defer conn.Close()
+	pipeTCP(conn, "127.0.0.1:0", false)
+}
+
 func serveSocks5(ctx context.Context, addr, user, pass string) error {
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -727,13 +798,25 @@ func handleSocks5(conn net.Conn, user, pass string) {
 }
 
 func handleTCPConnect(conn net.Conn, target string) {
+	pipeTCP(conn, target, true)
+}
+
+func pipeTCP(conn net.Conn, target string, socksReply bool) {
 	connID := atomic.AddUint32(&connIDGen, 1)
+	pipeExisting(conn, connID, target, socksReply)
+}
+
+func pipeExisting(conn net.Conn, connID uint32, target string, socksReply bool) {
 	vc := newTCPVConn(connID)
 	registerTCP(vc)
 	defer unregisterTCP(connID)
 
-	sendNow(&common.Frame{ConnID: connID, Type: common.TypeOpen, Seq: 0, Data: []byte(target)})
-	_, _ = conn.Write([]byte{5, 0, 0, 1, 0, 0, 0, 0, 0, 0})
+	if target != "" {
+		sendNow(&common.Frame{ConnID: connID, Type: common.TypeOpen, Seq: 0, Data: []byte(target)})
+	}
+	if socksReply {
+		_, _ = conn.Write([]byte{5, 0, 0, 1, 0, 0, 0, 0, 0, 0})
+	}
 	lg.Info(fmt.Sprintf("[tcp:%d] CONNECT %s", connID, target))
 
 	upDone := make(chan struct{})
@@ -903,6 +986,7 @@ func applyConfig(c Config) {
 	cfgSocksUser = c.SocksUser
 	cfgSocksPass = c.SocksPass
 	cfgDebug = c.Debug
+	cfgReverse = c.ReverseAddr
 }
 
 // Run starts the FTP tunnel client and blocks until ctx is cancelled.
@@ -958,7 +1042,13 @@ func Run(ctx context.Context, c Config) error {
 	}
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- serveSocks5(ctx, cfgListen, cfgSocksUser, cfgSocksPass)
+		if cfgReverse != "" {
+			sendNow(&common.Frame{ConnID: 0, Type: common.TypeReverseBind, Data: []byte(cfgListen)})
+			<-ctx.Done()
+			errCh <- nil
+			return
+		}
+		errCh <- serveTCPForward(ctx, cfgListen)
 	}()
 
 	select {

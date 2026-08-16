@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mux layer — PT Proxy wiki</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="layout">
+    <nav id="nav"></nav>
+    <main>
+      <h1>Multiplexing</h1>
+      <p>Several TCP connections and a UDP flow share one camouflage session. Package <code>common/muxpipe</code>, using smux v2 (10-minute keepalive).</p>
+
+      <h2>What it can do</h2>
+      <ul>
+        <li>Many concurrent TCP pipes</li>
+        <li>UDP datagrams with peer addresses</li>
+        <li>Ask the far side to bind a host:port (reverse) and accept connections back</li>
+      </ul>
+
+      <h2>Obfs</h2>
+      <p>After the obfuscated handshake, a PT Proxy client writes <code>PTPXMUX1</code> and starts smux. The server waits up to 500ms:</p>
+      <ul>
+        <li>Prefix present → mux session (forward to <code>target</code>, or reverse bind).</li>
+        <li>Otherwise, if <code>target</code> is set → raw TCP splice to that address (fits Tor ORPort and other single-stream TCP). If <code>target</code> is unset, the connection ends.</li>
+      </ul>
+
+      <h2>Stream kinds</h2>
+      <p>First byte of each smux stream:</p>
+      <table>
+        <tr><th>Value</th><th>Name</th><th>Capability</th></tr>
+        <tr><td>1</td><td>KindTCP</td><td>Bidirectional TCP. Server dials <code>target</code>.</td></tr>
+        <tr><td>2</td><td>KindUDP</td><td>Datagrams: 1-byte addr length, addr, 2-byte payload length, payload.</td></tr>
+        <tr><td>3</td><td>KindRevBind</td><td>Listen address in; bound address out; then the server accepts.</td></tr>
+        <tr><td>4</td><td>KindRevTCP</td><td>Incoming reverse TCP. Client dials <code>reverse-tag</code>.</td></tr>
+      </table>
+
+      <h2>Snowflake</h2>
+      <p>KCP already provides smux. The same kind bytes run on that session; there is no extra prefix.</p>
+    </main>
+  </div>
+  <script src="nav.js"></script>
+</body>
+</html>

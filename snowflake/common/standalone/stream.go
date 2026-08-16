@@ -14,12 +14,15 @@ const (
 	StreamClientDial = 1 // client wants remote (server) to dial target
 	StreamServerDial = 2 // server wants remote (client) to dial target
 	StreamForward    = 3 // bridge to server local SOCKS port
+	StreamCaps       = 4 // capability probe: server replies one byte (0=standalone, 1=external)
 )
 
 // SessionConfig configures inbound stream handling on the server.
 type SessionConfig struct {
 	// ServerForwardSocks is the loopback address of the server SOCKS listener.
 	ServerForwardSocks string
+	// ExternalService, if set, is dialed instead of the client-supplied target.
+	ExternalService string
 }
 
 // WriteTarget writes a stream type and SOCKS-style address to the stream.
@@ -28,7 +31,7 @@ func WriteTarget(w io.Writer, streamType byte, target socks5.Target) error {
 	if _, err := w.Write([]byte{streamType}); err != nil {
 		return err
 	}
-	if streamType == StreamForward {
+	if streamType == StreamForward || streamType == StreamCaps {
 		return nil
 	}
 	host := target.Host
@@ -78,7 +81,7 @@ func ReadTarget(r io.Reader) (byte, socks5.Target, error) {
 	if _, err := io.ReadFull(r, streamType[:]); err != nil {
 		return 0, socks5.Target{}, err
 	}
-	if streamType[0] == StreamForward {
+	if streamType[0] == StreamForward || streamType[0] == StreamCaps {
 		return streamType[0], socks5.Target{}, nil
 	}
 	var atyp [1]byte

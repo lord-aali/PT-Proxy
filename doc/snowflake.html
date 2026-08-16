@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Snowflake — PT Proxy wiki</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="layout">
+    <nav id="nav"></nav>
+    <main>
+      <h1>Snowflake</h1>
+      <p>A WebSocket relay with TurboTunnel, KCP, and smux. The session looks like a website WebSocket. Optional WSS. Optional domain fronting via <code>sni</code> and <code>front-host</code>. Optional upstream proxy to reach the WebSocket.</p>
+
+      <h2>Capabilities</h2>
+      <ul>
+        <li>Forward and reverse (TCP + UDP over smux)</li>
+        <li><code>ws://</code> and <code>wss://</code></li>
+        <li>Custom TLS SNI and Host header</li>
+      </ul>
+
+      <h2>Config</h2>
+      <p><strong>Server:</strong> <code>listen</code> (default <code>0.0.0.0:8080</code>), optional <code>tls-cert</code> / <code>tls-key</code>, optional <code>target</code>.</p>
+      <p><strong>Client:</strong> <code>address</code> WebSocket URL, <code>listen</code>, optional <code>sni</code>, <code>front-host</code>, <code>proxy</code>, <code>insecure</code>, <code>reverse-tag</code>.</p>
+
+      <h2>How it works</h2>
+      <p>HTTP upgrades to WebSocket. A token and client ID select a packet queue. KCP runs in stream mode over those packets, then smux v2. Each smux session multiplexes TCP pipes, UDP, and reverse binds (same stream kinds as <a href="muxpipe.html">muxpipe</a>).</p>
+    </main>
+  </div>
+  <script src="nav.js"></script>
+</body>
+</html>

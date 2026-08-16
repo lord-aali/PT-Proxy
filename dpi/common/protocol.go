@@ -19,11 +19,13 @@ const (
 
 // Message types
 const (
-	MsgConnect   = 0x01
-	MsgData      = 0x02
-	MsgClose     = 0x03
-	MsgUDPAssoc  = 0x04
-	MsgUDPPacket = 0x05
+	MsgConnect     = 0x01
+	MsgData        = 0x02
+	MsgClose       = 0x03
+	MsgUDPAssoc    = 0x04
+	MsgUDPPacket   = 0x05
+	MsgReverseBind = 0x07
+	MsgReverseOpen = 0x09
 )
 
 // Uplink modes (client).

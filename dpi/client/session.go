@@ -144,6 +144,9 @@ func (t *Transport) startSession() (*muxSession, error) {
 				continue
 			}
 			switch hdr.MsgType {
+			case common.MsgReverseOpen:
+				s.pin(hdr.ConnID)
+				go s.tr.handleReverseOpen(hdr.ConnID)
 			case common.MsgData:
 				if int(hdr.PayloadLen) > len(payload) {
 					continue

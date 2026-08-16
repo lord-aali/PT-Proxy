@@ -87,10 +87,22 @@ func handleInboundStream(stream net.Conn, cfg SessionConfig) {
 		return
 	}
 	switch streamType {
+	case StreamCaps:
+		mode := byte(0)
+		if cfg.ExternalService != "" {
+			mode = 1
+		}
+		_, _ = stream.Write([]byte{mode})
 	case StreamClientDial:
-		remote, err := net.Dial(target.Network, target.Addr())
+		dialAddr := target.Addr()
+		dialNet := target.Network
+		if cfg.ExternalService != "" {
+			dialAddr = cfg.ExternalService
+			dialNet = "tcp"
+		}
+		remote, err := net.Dial(dialNet, dialAddr)
 		if err != nil {
-			log.Printf("dial %s: %v", target.Addr(), err)
+			log.Printf("dial %s: %v", dialAddr, err)
 			return
 		}
 		defer remote.Close()
@@ -152,4 +164,22 @@ func OpenForward(sess *smux.Session) (net.Conn, error) {
 		return nil, err
 	}
 	return stream, nil
+}
+
+// ProbeCaps asks the server if it is in external mode. Old servers: standalone.
+func ProbeCaps(sess *smux.Session) bool {
+	stream, err := sess.OpenStream()
+	if err != nil {
+		return false
+	}
+	defer stream.Close()
+	if err := WriteTarget(stream, StreamCaps, socks5.Target{}); err != nil {
+		return false
+	}
+	_ = stream.SetReadDeadline(time.Now().Add(5 * time.Second))
+	var mode [1]byte
+	if _, err := io.ReadFull(stream, mode[:]); err != nil {
+		return false
+	}
+	return mode[0] == 1
 }

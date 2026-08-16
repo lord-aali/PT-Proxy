@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lord-aali/PT-Proxy/common/dualbind"
 	"github.com/lord-aali/PT-Proxy/common/ptlog"
 	"github.com/things-go/go-socks5"
 )
@@ -91,6 +92,107 @@ func (p *ProxyServer) Run() error {
 	}
 
 	return nil
+}
+
+// RunTCP listens for raw TCP and pipes each connection through the tunnel
+// (server external-service mode).
+func (p *ProxyServer) RunTCP() error {
+	addr := p.socksAddr
+	if addr == "" {
+		addr = p.httpAddr
+	}
+	if addr == "" {
+		return fmt.Errorf("no listen address")
+	}
+	ln, udp, bound, err := dualbind.Listen(addr)
+	if err != nil {
+		return err
+	}
+	p.listeners = append(p.listeners, ln)
+	p.log.Info("forward listen", bound)
+	if udp != nil {
+		go p.handleUDPForward(udp)
+	}
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go p.handleTCPForward(conn)
+		}
+	}()
+	return nil
+}
+
+func (p *ProxyServer) handleUDPForward(pc *net.UDPConn) {
+	buf := make([]byte, 65535)
+	var last *net.UDPAddr
+	connID, err := p.transport.Connect("udp", "127.0.0.1:0")
+	if err != nil {
+		p.log.Error("udp connect:", err)
+		return
+	}
+	tunnel, err := newTunnelConn(p.transport, connID, p.log, p.verbose)
+	if err != nil {
+		return
+	}
+	defer tunnel.Close()
+	go func() {
+		b := make([]byte, 65535)
+		for {
+			n, err := tunnel.Read(b)
+			if n > 0 && last != nil {
+				_, _ = pc.WriteToUDP(b[:n], last)
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+	for {
+		n, from, err := pc.ReadFromUDP(buf)
+		if err != nil {
+			return
+		}
+		last = from
+		_, _ = tunnel.Write(buf[:n])
+	}
+}
+
+func (p *ProxyServer) RunReverse(listen, local string) error {
+	p.transport.ReverseLocal = local
+	if err := p.transport.SendReverseBind(listen); err != nil {
+		return err
+	}
+	p.log.Info("reverse requested", listen, "->", local)
+	return nil
+}
+
+func (p *ProxyServer) handleTCPForward(conn net.Conn) {
+	defer conn.Close()
+	connID, err := p.transport.Connect("tcp", "127.0.0.1:0")
+	if err != nil {
+		p.log.Error("external connect:", err)
+		return
+	}
+	tunnel, err := newTunnelConn(p.transport, connID, p.log, p.verbose)
+	if err != nil {
+		p.log.Error("external tunnel:", err)
+		_ = p.transport.CloseConn(connID)
+		return
+	}
+	defer tunnel.Close()
+	errCh := make(chan error, 2)
+	go func() {
+		_, err := io.Copy(tunnel, conn)
+		errCh <- err
+	}()
+	go func() {
+		_, err := io.Copy(conn, tunnel)
+		errCh <- err
+	}()
+	<-errCh
 }
 
 func (p *ProxyServer) serveSOCKS() {

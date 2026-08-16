@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lord-aali/PT-Proxy/common/dualbind"
 	"github.com/lord-aali/PT-Proxy/common/ptlog"
 	"github.com/lord-aali/PT-Proxy/ftp/common"
 )
@@ -31,6 +32,8 @@ type Config struct {
 	CertKey       string
 	Debug         bool
 	LogTag        string
+	Target        string
+	SkipUDP       bool
 }
 
 var (
@@ -45,6 +48,8 @@ var (
 	cfgCert          = "cert.pem"
 	cfgCertKey       = "key.pem"
 	cfgDebug         bool
+	cfgTarget        string
+	cfgSkipUDP       bool
 
 	lg ptlog.PTLog
 )
@@ -423,6 +428,9 @@ func tcpDial(token string, connID uint32, target string) (*tcpUpstream, error) {
 	if u, ok := tcpUps[key]; ok {
 		return u, nil
 	}
+	if ext := strings.TrimSpace(cfgTarget); ext != "" {
+		target = ext
+	}
 	conn, err := net.DialTimeout("tcp", target, 10*time.Second)
 	if err != nil {
 		return nil, err
@@ -550,9 +558,17 @@ func processFrame(token string, f *common.Frame) {
 	key := connKey(token, f.ConnID)
 
 	switch f.Type {
+	case common.TypeReverseBind:
+		listen := string(f.Data)
+		go ftpRunReverse(token, listen)
 	case common.TypeOpen:
 		target := string(f.Data)
 		if target == "udp://" {
+			if cfgSkipUDP {
+				lg.Error(fmt.Sprintf("[udp %s] not supported for http target", key))
+				writeDown(token, []*common.Frame{{ConnID: f.ConnID, Type: common.TypeClose}})
+				return
+			}
 			if _, err := udpGetOrCreate(token, f.ConnID); err != nil {
 				lg.Error(fmt.Sprintf("[udp %s] create: %v", key, err))
 			}
@@ -981,6 +997,58 @@ func applyConfig(c Config) {
 		cfgCertKey = c.CertKey
 	}
 	cfgDebug = c.Debug
+	cfgTarget = strings.TrimSpace(c.Target)
+	cfgSkipUDP = c.SkipUDP
+}
+
+func ftpRunReverse(token, listen string) {
+	ln, udp, bound, err := dualbind.Listen(listen)
+	if err != nil {
+		lg.Error("reverse bind:", err)
+		return
+	}
+	lg.Info("ftp reverse listen", bound)
+	if udp != nil {
+		go func() {
+			buf := make([]byte, 65535)
+			id := uint32(0xfffffffe)
+			for {
+				n, from, err := udp.ReadFromUDP(buf)
+				if err != nil {
+					return
+				}
+				data := common.EncodeUDPData(from.String(), buf[:n])
+				writeDown(token, []*common.Frame{{ConnID: id, Type: common.TypeUDPData, Data: data}})
+			}
+		}()
+	}
+	for {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		id := atomic.AddUint32(new(uint32), 1)
+		if id == 0 {
+			id = 1
+		}
+		go func(c net.Conn, id uint32) {
+			defer c.Close()
+			writeDown(token, []*common.Frame{{ConnID: id, Type: common.TypeReverseOpen}})
+			if _, err := tcpAttach(token, id, c); err != nil {
+				lg.Error("reverse tcp:", err)
+			}
+		}(c, id)
+	}
+}
+
+func tcpAttach(token string, connID uint32, conn net.Conn) (*tcpUpstream, error) {
+	key := connKey(token, connID)
+	tcpUpMu.Lock()
+	defer tcpUpMu.Unlock()
+	u := &tcpUpstream{key: key, token: token, connID: connID, conn: conn}
+	tcpUps[key] = u
+	go pumpTCP(u)
+	return u, nil
 }
 
 // Run starts the FTP tunnel server and blocks until ctx is cancelled.

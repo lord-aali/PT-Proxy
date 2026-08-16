@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Forward &amp; reverse — PT Proxy wiki</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="layout">
+    <nav id="nav"></nav>
+    <main>
+      <h1>Forward and reverse</h1>
+      <p>Every camouflage tunnel can carry TCP streams and UDP datagrams (UDP is framed inside the tunnel). What you attach at each end is a tagged service: socks, http, or external.</p>
+
+      <h2>Forward</h2>
+      <p>The service runs beside the tunnel server. The client binds <code>listen</code> locally. Applications connect to that port; each TCP connection and each UDP packet is carried to the service named by the server’s <code>target</code>.</p>
+      <pre><code>App  --TCP/UDP-->  client listen  --tunnel-->  server  --dial-->  tagged service</code></pre>
+      <p>If that service is SOCKS5, the app speaks SOCKS on the client port. If it is SSH, the app speaks SSH. The tunnel copies bytes.</p>
+      <p>Config: service + tunnel with <code>target</code> on the server machine; tunnel client with <code>address</code> and local <code>listen</code>.</p>
+
+      <h2>Reverse</h2>
+      <p>The service runs beside the tunnel client (listed under that process’s <code>server</code> array). The public tunnel has no <code>target</code>. The client sets <code>reverse-tag</code> and <code>listen</code> — <code>listen</code> is the address to publish on the tunnel server.</p>
+      <pre><code>Peer  --TCP/UDP-->  server bind (client.listen)  --tunnel-->  client  --dial-->  reverse-tag service</code></pre>
+      <p>The client asks the server to bind that address (TCP and UDP). The server replies with the real bound address (useful when the port was <code>0</code>). Each accepted TCP connection becomes a stream to the client, which dials the tagged service. UDP uses a datagram stream and remembers the last peer so replies return correctly.</p>
+
+      <h2>UDP</h2>
+      <p>On the wire, tunnels are reliable streams. UDP is encapsulated (address + payload). SOCKS5 UDP ASSOCIATE uses the same port as TCP. HTTP CONNECT is TCP-only.</p>
+    </main>
+  </div>
+  <script src="nav.js"></script>
+</body>
+</html>

@@ -323,20 +323,31 @@
   <div class="toast" id="toast"></div>
 
   <script>
-    const TYPES = ["obfs4", "obfs3", "obfs2", "dpi", "snowflake", "ftp"];
+    const SERVER_TYPES = ["socks", "http", "external", "obfs4", "obfs3", "obfs2", "dpi", "snowflake", "ftp"];
+    const CLIENT_TYPES = ["obfs4", "obfs3", "obfs2", "dpi", "snowflake", "ftp"];
     const isObfs = (t) => t === "obfs4" || t === "obfs3" || t === "obfs2";
+    const isService = (t) => t === "socks" || t === "http" || t === "external";
 
     const state = {
       server: [],
       client: [],
     };
 
+    function defaultListen(type) {
+      if (type === "dpi") return "";
+      if (type === "socks" || type === "http") return "127.0.0.1:0";
+      if (type === "external") return "";
+      if (type === "snowflake") return "0.0.0.0:8080";
+      if (type === "ftp") return "0.0.0.0:21";
+      return "0.0.0.0:3334";
+    }
+
     function defaultServer(type) {
       return {
         type,
-        listen: type === "dpi" ? "" : "0.0.0.0:3334",
-        external: false,
-        "external-service": "",
+        tag: "",
+        target: "",
+        listen: defaultListen(type),
         cert: "",
         "private-key": "",
         "enc-key": "change-me-shared-key",
@@ -350,9 +361,8 @@
         "self-signed": type === "dpi",
         redirect: "",
         "cert-dir": "",
-        "socks-bind": "127.0.0.1:0",
-        user: "tunnel",
-        pass: "secret",
+        user: type === "ftp" ? "tunnel" : "",
+        pass: type === "ftp" ? "secret" : "",
         "pasv-ip": "",
         "upload-ports": "8080",
         "download-ports": "8081",
@@ -363,9 +373,10 @@
     function defaultClient(type) {
       return {
         type,
-        listen: "127.0.0.1:4455",
-        address: type === "dpi" ? "https://127.0.0.1:443" : type === "snowflake" ? "ws://127.0.0.1:8080/" : "127.0.0.1:3334",
-        external: false,
+        listen: "127.0.0.1:1080",
+        tag: "",
+        "reverse-tag": "",
+        address: type === "dpi" ? "https://127.0.0.1:443" : type === "snowflake" ? "ws://127.0.0.1:8080/" : type === "ftp" ? "127.0.0.1:21" : "127.0.0.1:3334",
         cert: "",
         "enc-key": "change-me-shared-key",
         protocol: "auto",
@@ -472,16 +483,21 @@
       const soft = (key) => (v) => setServerField(index, key, v, false);
       const hard = (key) => (v) => setServerField(index, key, v, true);
       const fields = [
-        fieldSelect("type", type, TYPES, hard("type")),
+        fieldSelect("type", type, SERVER_TYPES, hard("type")),
+        fieldText("tag", entry.tag, soft("tag"), false, "auto type-port if empty"),
       ];
 
       if (type !== "dpi") {
-        fields.push(fieldText("listen", entry.listen, soft("listen"), false, "0.0.0.0:3334"));
+        fields.push(fieldText("listen", entry.listen, soft("listen"), false, type === "socks" || type === "http" ? "127.0.0.1:0" : type === "external" ? "127.0.0.1:22" : "0.0.0.0:3334"));
+      }
+      if (!isService(type)) {
+        fields.push(fieldText("target", entry.target, soft("target"), false, "tag of socks/http/external"));
+      }
+      if (type === "socks") {
+        fields.push(fieldText("user", entry.user, soft("user")), fieldText("pass", entry.pass, soft("pass")));
       }
       if (isObfs(type)) {
         fields.push(
-          fieldCheck("external", !!entry.external, soft("external")),
-          fieldText("external-service", entry["external-service"], soft("external-service"), false, "127.0.0.1:1080"),
           fieldText("cert", entry.cert, soft("cert"), true, type === "obfs4" ? "auto-generated if empty" : ""),
         );
         if (type === "obfs4") {
@@ -505,7 +521,6 @@
       }
       if (type === "snowflake") {
         fields.push(
-          fieldText("socks-bind", entry["socks-bind"], soft("socks-bind"), false, "127.0.0.1:0"),
           fieldText("tls-cert", entry["tls-cert"], soft("tls-cert")),
           fieldText("tls-key", entry["tls-key"], soft("tls-key")),
         );
@@ -531,15 +546,16 @@
       const soft = (key) => (v) => setClientField(index, key, v, false);
       const hard = (key) => (v) => setClientField(index, key, v, true);
       const fields = [
-        fieldSelect("type", type, TYPES, hard("type")),
-        fieldText("listen", entry.listen, soft("listen"), false, "127.0.0.1:4455"),
+        fieldSelect("type", type, CLIENT_TYPES, hard("type")),
+        fieldText("tag", entry.tag, soft("tag"), false, "auto type-port if empty"),
+        fieldText("listen", entry.listen, soft("listen"), false, "127.0.0.1:1080"),
         fieldText("address", entry.address, soft("address"), true,
           type === "dpi" ? "https://host:443" : type === "snowflake" ? "ws://host:8080/" : "host:port"),
+        fieldText("reverse-tag", entry["reverse-tag"], soft("reverse-tag"), false, "service tag in this file's server list"),
       ];
 
       if (isObfs(type)) {
         fields.push(
-          fieldCheck("external", !!entry.external, soft("external")),
           fieldText("cert", entry.cert, soft("cert"), true, type === "obfs4" ? "server cert" : ""),
         );
       }
@@ -549,10 +565,7 @@
           fieldSelect("protocol", entry.protocol || "auto", ["auto", "h1", "h2"], soft("protocol")),
           fieldText("sni", entry.sni, soft("sni")),
           fieldCheck("insecure", !!entry.insecure, soft("insecure")),
-          fieldText("http-proxy", entry["http-proxy"], soft("http-proxy"), false, "127.0.0.1:8080"),
           fieldCheck("redirect-follow", entry["redirect-follow"] !== false, soft("redirect-follow")),
-          fieldText("dns-upstream", entry["dns-upstream"], soft("dns-upstream")),
-          fieldSelect("dns-network", entry["dns-network"] || "tcp", ["tcp", "udp"], soft("dns-network")),
           fieldText("front-host", entry["front-host"], soft("front-host")),
           fieldSelect("uplink", entry.uplink || "post-async", ["post-async", "stream"], soft("uplink")),
           fieldCheck("verbose", !!entry.verbose, soft("verbose")),
@@ -563,7 +576,6 @@
           fieldText("sni", entry.sni, soft("sni")),
           fieldText("front-host", entry["front-host"], soft("front-host")),
           fieldText("proxy", entry.proxy, soft("proxy"), false, "socks5://127.0.0.1:9050"),
-          fieldText("forward-bind", entry["forward-bind"], soft("forward-bind")),
           fieldCheck("insecure", !!entry.insecure, soft("insecure")),
         );
       }
@@ -576,8 +588,6 @@
           fieldNumber("download-channels", entry["download-channels"], soft("download-channels")),
           fieldText("override-up-addr", entry["override-up-addr"], soft("override-up-addr")),
           fieldText("override-down-addr", entry["override-down-addr"], soft("override-down-addr")),
-          fieldText("socks-user", entry["socks-user"], soft("socks-user")),
-          fieldText("socks-pass", entry["socks-pass"], soft("socks-pass")),
           fieldCheck("decoy", !!entry.decoy, soft("decoy")),
           fieldCheck("tls", !!entry.tls, soft("tls")),
           fieldCheck("verbose", !!entry.verbose, soft("verbose")),
@@ -596,10 +606,14 @@
         out[k] = typeof v === "string" ? v.trim() : v;
       };
 
+      set("tag", entry.tag);
       if (type !== "dpi") set("listen", entry.listen);
+      if (!isService(type)) set("target", entry.target);
+      if (type === "socks") {
+        set("user", entry.user);
+        set("pass", entry.pass);
+      }
       if (isObfs(type)) {
-        set("external", !!entry.external, true);
-        set("external-service", entry["external-service"]);
         set("cert", entry.cert);
         if (type === "obfs4") set("private-key", entry["private-key"]);
       }
@@ -618,7 +632,6 @@
       }
       if (type === "snowflake") {
         set("listen", entry.listen);
-        set("socks-bind", entry["socks-bind"]);
         set("tls-cert", entry["tls-cert"]);
         set("tls-key", entry["tls-key"]);
       }
@@ -648,11 +661,12 @@
         out[k] = typeof v === "string" ? v.trim() : v;
       };
 
+      set("tag", entry.tag);
       set("listen", entry.listen);
       set("address", entry.address);
+      set("reverse-tag", entry["reverse-tag"]);
 
       if (isObfs(type)) {
-        set("external", !!entry.external, true);
         set("cert", entry.cert);
       }
       if (type === "dpi") {
@@ -660,10 +674,7 @@
         set("protocol", entry.protocol);
         set("sni", entry.sni);
         set("insecure", !!entry.insecure);
-        set("http-proxy", entry["http-proxy"]);
         if (entry["redirect-follow"] === false) out["redirect-follow"] = false;
-        set("dns-upstream", entry["dns-upstream"]);
-        set("dns-network", entry["dns-network"]);
         set("front-host", entry["front-host"]);
         set("uplink", entry.uplink || "post-async");
         set("verbose", !!entry.verbose);
@@ -672,7 +683,6 @@
         set("sni", entry.sni);
         set("front-host", entry["front-host"]);
         set("proxy", entry.proxy);
-        set("forward-bind", entry["forward-bind"]);
         set("insecure", !!entry.insecure);
       }
       if (type === "ftp") {
@@ -683,8 +693,6 @@
         if (entry["download-channels"] > 0) out["download-channels"] = entry["download-channels"];
         set("override-up-addr", entry["override-up-addr"]);
         set("override-down-addr", entry["override-down-addr"]);
-        set("socks-user", entry["socks-user"]);
-        set("socks-pass", entry["socks-pass"]);
         set("decoy", !!entry.decoy);
         set("tls", !!entry.tls);
         set("verbose", !!entry.verbose);

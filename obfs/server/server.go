@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/lord-aali/PT-Proxy/common/configuration"
+	"github.com/lord-aali/PT-Proxy/common/muxpipe"
 	"github.com/lord-aali/PT-Proxy/common/ptlog"
 	"github.com/lord-aali/PT-Proxy/common/urls"
 	"github.com/lord-aali/PT-Proxy/common/utils"
@@ -26,8 +27,10 @@ import (
 const obfs4CertRawLength = ntor.NodeIDLength + ntor.PublicKeyLength
 
 type Server struct {
-	LogTag string
-	log    ptlog.PTLog
+	LogTag  string
+	log     ptlog.PTLog
+	Target  string
+	SkipUDP bool
 }
 
 func (s Server) Setup(config configuration.JsonServerConfigImpl) (launched bool, listeners []net.Listener) {
@@ -132,10 +135,23 @@ func (s Server) serverHandler(f base.ServerFactory, conn net.Conn, info *pt.Serv
 		return
 	}
 
-	// Connect to the orport.
-	orConn, err := pt.DialOr(info, conn.RemoteAddr().String(), name)
+	isMux, remote := muxpipe.Detect(remote)
+	if isMux {
+		sess, err := muxpipe.OpenServer(remote)
+		if err != nil {
+			log.Warnf("%s(%s) - mux: %s", name, addrStr, log.ElideError(err))
+			return
+		}
+		muxpipe.Serve(sess, s.Target, s.SkipUDP)
+		return
+	}
+
+	if strings.TrimSpace(s.Target) == "" {
+		return
+	}
+	orConn, err := net.Dial("tcp", s.Target)
 	if err != nil {
-		log.Errorf("%s(%s) - failed to connect to ORPort: %s", name, addrStr, log.ElideError(err))
+		log.Errorf("%s(%s) - failed to connect to target: %s", name, addrStr, log.ElideError(err))
 		return
 	}
 	defer orConn.Close()
@@ -189,12 +205,6 @@ func (s Server) getPtServerInfo(config configuration.JsonServerConfigImpl, optio
 		Options:    options,
 	}
 	info.Bindaddrs = append(info.Bindaddrs, bindAddr)
-
-	addr, err = urls.ResolveAddr(config.ExternalServiceAddress)
-	if err != nil {
-		s.log.Fatal(err)
-	}
-	info.OrAddr = addr
 	info.ExtendedOrAddr = nil
 	info.AuthCookiePath = ""
 	return info
