@@ -73,7 +73,6 @@ func launchDpiServer(c configuration.JsonServerConfigImpl, tag, target string, s
 
 func launchDpiClient(c configuration.JsonClientConfigImpl, tag, reverseAddr string, skipUDP bool) bool {
 	lg := ptlog.PTLog{LogTag: tag}
-	_ = skipUDP
 
 	if strings.TrimSpace(c.Address) == "" {
 		lg.Error("dpi client requires a server address (URL)")
@@ -139,6 +138,7 @@ func launchDpiClient(c configuration.JsonClientConfigImpl, tag, reverseAddr stri
 		SOCKSAddr: socksAddr,
 		Verbose:   c.Verbose,
 		LogTag:    tag,
+		SkipUDP:   skipUDP,
 	})
 	if reverseAddr != "" {
 		if err := proxy.RunReverse(c.Listen, reverseAddr); err != nil {

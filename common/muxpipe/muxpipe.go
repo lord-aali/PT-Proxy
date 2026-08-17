@@ -3,6 +3,7 @@ package muxpipe
 import (
 	"encoding/binary"
 	"io"
+	"log"
 	"net"
 	"sync"
 	"time"
@@ -356,10 +357,12 @@ func listenDual(addr string) (net.Listener, *net.UDPConn, string, error) {
 	bound := ln.Addr().String()
 	ua, err := net.ResolveUDPAddr("udp", bound)
 	if err != nil {
+		log.Printf("muxpipe: UDP resolve %s: %v (TCP-only)", bound, err)
 		return ln, nil, bound, nil
 	}
 	pc, err := net.ListenUDP("udp", ua)
 	if err != nil {
+		log.Printf("muxpipe: UDP listen %s: %v (TCP-only)", bound, err)
 		return ln, nil, bound, nil
 	}
 	return ln, pc, bound, nil

@@ -43,6 +43,7 @@ type ProxyServer struct {
 	listeners   []net.Listener
 	log         ptlog.PTLog
 	verbose     bool
+	skipUDP     bool
 }
 
 // ProxyConfig holds proxy configuration.
@@ -54,6 +55,7 @@ type ProxyConfig struct {
 	DNSNetwork  string // "tcp" or "udp"
 	Verbose     bool
 	LogTag      string
+	SkipUDP     bool
 }
 
 // NewProxyServer creates a proxy server.
@@ -66,6 +68,7 @@ func NewProxyServer(cfg ProxyConfig) *ProxyServer {
 		dnsNetwork:  cfg.DNSNetwork,
 		log:         ptlog.PTLog{LogTag: cfg.LogTag},
 		verbose:     cfg.Verbose,
+		skipUDP:     cfg.SkipUDP,
 	}
 }
 
@@ -110,7 +113,7 @@ func (p *ProxyServer) RunTCP() error {
 	}
 	p.listeners = append(p.listeners, ln)
 	p.log.Info("forward listen", bound)
-	if udp != nil {
+	if udp != nil && !p.skipUDP {
 		go p.handleUDPForward(udp)
 	}
 	go func() {
@@ -126,47 +129,86 @@ func (p *ProxyServer) RunTCP() error {
 }
 
 func (p *ProxyServer) handleUDPForward(pc *net.UDPConn) {
+	for {
+		if err := p.runUDPForwardOnce(pc); err != nil {
+			p.log.Error("udp forward:", err)
+		}
+		time.Sleep(time.Second)
+	}
+}
+
+func (p *ProxyServer) runUDPForwardOnce(pc *net.UDPConn) error {
 	buf := make([]byte, 65535)
 	var last *net.UDPAddr
+	var lastMu sync.Mutex
 	connID, err := p.transport.Connect("udp", "127.0.0.1:0")
 	if err != nil {
-		p.log.Error("udp connect:", err)
-		return
+		return err
 	}
 	tunnel, err := newTunnelConn(p.transport, connID, p.log, p.verbose)
 	if err != nil {
-		return
+		return err
 	}
 	defer tunnel.Close()
+	errCh := make(chan error, 2)
 	go func() {
 		b := make([]byte, 65535)
 		for {
 			n, err := tunnel.Read(b)
-			if n > 0 && last != nil {
-				_, _ = pc.WriteToUDP(b[:n], last)
+			if n > 0 {
+				lastMu.Lock()
+				dst := last
+				lastMu.Unlock()
+				if dst != nil {
+					_, _ = pc.WriteToUDP(b[:n], dst)
+				}
 			}
 			if err != nil {
+				errCh <- err
 				return
 			}
 		}
 	}()
-	for {
-		n, from, err := pc.ReadFromUDP(buf)
-		if err != nil {
-			return
+	go func() {
+		for {
+			n, from, err := pc.ReadFromUDP(buf)
+			if err != nil {
+				errCh <- err
+				return
+			}
+			lastMu.Lock()
+			last = from
+			lastMu.Unlock()
+			if _, err := tunnel.Write(buf[:n]); err != nil {
+				errCh <- err
+				return
+			}
 		}
-		last = from
-		_, _ = tunnel.Write(buf[:n])
-	}
+	}()
+	return <-errCh
 }
 
 func (p *ProxyServer) RunReverse(listen, local string) error {
 	p.transport.ReverseLocal = local
-	if err := p.transport.SendReverseBind(listen); err != nil {
-		return err
-	}
+	go p.reverseMaintain(listen, local)
 	p.log.Info("reverse requested", listen, "->", local)
 	return nil
+}
+
+func (p *ProxyServer) reverseMaintain(listen, local string) {
+	for {
+		if err := p.transport.SendReverseBind(listen); err != nil {
+			p.log.Error("reverse bind:", err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		p.log.Info("reverse bind ok", listen, "->", local)
+		// Wait until stream sessions die, then re-bind.
+		for p.transport.HasLiveSession() {
+			time.Sleep(3 * time.Second)
+		}
+		time.Sleep(time.Second)
+	}
 }
 
 func (p *ProxyServer) handleTCPForward(conn net.Conn) {

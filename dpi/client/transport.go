@@ -433,10 +433,27 @@ func (t *Transport) SendReverseBind(listen string) error {
 	return nil
 }
 
+func (t *Transport) HasLiveSession() bool {
+	t.sessMu.Lock()
+	defer t.sessMu.Unlock()
+	kept := t.sessions[:0]
+	live := false
+	for _, s := range t.sessions {
+		if s == nil || s.isClosed() {
+			continue
+		}
+		kept = append(kept, s)
+		live = true
+	}
+	t.sessions = kept
+	return live
+}
+
 func (t *Transport) handleReverseOpen(connID uint32) {
 	if t.ReverseLocal == "" {
 		return
 	}
+	atomic.AddInt32(&t.active, 1)
 	local, err := net.Dial("tcp", t.ReverseLocal)
 	if err != nil {
 		t.log.Error("reverse dial:", err)
@@ -446,7 +463,7 @@ func (t *Transport) handleReverseOpen(connID uint32) {
 	defer local.Close()
 	tunnel, err := newTunnelConn(t, connID, t.log, false)
 	if err != nil {
-		local.Close()
+		_ = t.CloseConn(connID)
 		return
 	}
 	defer tunnel.Close()
@@ -454,4 +471,25 @@ func (t *Transport) handleReverseOpen(connID uint32) {
 	go func() { _, err := io.Copy(tunnel, local); errCh <- err }()
 	go func() { _, err := io.Copy(local, tunnel); errCh <- err }()
 	<-errCh
+}
+
+func (t *Transport) handleReverseUDPPacket(payload []byte) {
+	if t.ReverseLocal == "" {
+		return
+	}
+	i := bytes.IndexByte(payload, 0)
+	if i < 0 || i+1 >= len(payload) {
+		return
+	}
+	data := payload[i+1:]
+	dst, err := net.ResolveUDPAddr("udp", t.ReverseLocal)
+	if err != nil {
+		return
+	}
+	c, err := net.DialUDP("udp", nil, dst)
+	if err != nil {
+		return
+	}
+	defer c.Close()
+	_, _ = c.Write(data)
 }

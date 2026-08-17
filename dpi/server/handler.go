@@ -17,6 +17,9 @@ const dialTimeout = 30 * time.Second
 
 type tunnelHandler struct {
 	server *Server
+	revMu  sync.Mutex
+	revLn  net.Listener
+	revUDP *net.UDPConn
 }
 
 func newTunnelHandler(s *Server) *tunnelHandler {
@@ -438,11 +441,26 @@ func (s *Server) firstSession() *muxSession {
 }
 
 func (h *tunnelHandler) runReverse(listen string) {
+	h.revMu.Lock()
+	if h.revLn != nil {
+		_ = h.revLn.Close()
+		h.revLn = nil
+	}
+	if h.revUDP != nil {
+		_ = h.revUDP.Close()
+		h.revUDP = nil
+	}
+	h.revMu.Unlock()
+
 	ln, udp, bound, err := dualbind.Listen(listen)
 	if err != nil {
 		h.server.log.Error("reverse bind:", err)
 		return
 	}
+	h.revMu.Lock()
+	h.revLn = ln
+	h.revUDP = udp
+	h.revMu.Unlock()
 	h.server.log.Info("reverse listen", bound)
 	if udp != nil {
 		go h.reverseUDP(udp)

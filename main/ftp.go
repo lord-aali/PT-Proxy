@@ -59,7 +59,6 @@ func launchFtpServer(c configuration.JsonServerConfigImpl, tag, target string, s
 
 func launchFtpClient(c configuration.JsonClientConfigImpl, tag, reverseAddr string, skipUDP bool) bool {
 	lg := ptlog.PTLog{LogTag: tag}
-	_ = skipUDP
 
 	if strings.TrimSpace(c.Address) == "" {
 		lg.Error("ftp client requires a server address (FTP host:port)")
@@ -90,6 +89,7 @@ func launchFtpClient(c configuration.JsonClientConfigImpl, tag, reverseAddr stri
 		Debug:            c.Verbose,
 		LogTag:           tag,
 		ReverseAddr:      reverseAddr,
+		SkipUDP:          skipUDP,
 	}
 
 	go func() {

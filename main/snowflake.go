@@ -93,20 +93,9 @@ func launchSnowflakeClient(c configuration.JsonClientConfigImpl, tag, reverseAdd
 		return SfWsConn.New(ws), nil
 	}
 
-	sess, _, err := SfStandalone.NewClientSession(SfStandalone.WrapWebSocketDial(dialWS))
-	if err != nil {
-		lg.Error("snowflake client session failed:", err)
-		return false
-	}
-
 	if reverseAddr != "" {
-		bound, err := muxpipe.RequestReverseBind(sess, c.Listen)
-		if err != nil {
-			lg.Error("snowflake reverse bind:", err)
-			return false
-		}
-		lg.InfoDelayed(time.Second, "snowflake reverse on", bound, "->", reverseAddr)
-		go muxpipe.RunReverseClient(sess, reverseAddr, skipUDP)
+		go snowflakeRunReverse(lg, dialWS, c.Listen, reverseAddr, skipUDP)
+		lg.InfoDelayed(time.Second, "snowflake reverse-tag", c.ReverseTag, "remote listen", c.Listen)
 		return true
 	}
 
@@ -117,6 +106,51 @@ func launchSnowflakeClient(c configuration.JsonClientConfigImpl, tag, reverseAdd
 		return false
 	}
 	lg.InfoDelayed(time.Second, "Client started listening", bound, "forward via snowflake")
-	go muxpipe.RunForwardClient(sess, ln, udp)
+	go snowflakeRunForward(lg, dialWS, ln, udp)
 	return true
+}
+
+func snowflakeRunForward(lg ptlog.PTLog, dialWS func() (net.Conn, error), ln net.Listener, udp *net.UDPConn) {
+	for {
+		sess, closer, err := SfStandalone.NewClientSession(SfStandalone.WrapWebSocketDial(dialWS))
+		if err != nil {
+			lg.Error("snowflake session:", err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		muxpipe.RunForwardClient(sess, ln, udp)
+		_ = sess.Close()
+		if closer != nil {
+			_ = closer.Close()
+		}
+		time.Sleep(time.Second)
+	}
+}
+
+func snowflakeRunReverse(lg ptlog.PTLog, dialWS func() (net.Conn, error), listen, reverseAddr string, skipUDP bool) {
+	for {
+		sess, closer, err := SfStandalone.NewClientSession(SfStandalone.WrapWebSocketDial(dialWS))
+		if err != nil {
+			lg.Error("snowflake session:", err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		bound, err := muxpipe.RequestReverseBind(sess, listen)
+		if err != nil || bound == "" {
+			lg.Error("snowflake reverse bind:", err)
+			_ = sess.Close()
+			if closer != nil {
+				_ = closer.Close()
+			}
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		lg.Info("snowflake reverse published on", bound, "->", reverseAddr)
+		muxpipe.RunReverseClient(sess, reverseAddr, skipUDP)
+		_ = sess.Close()
+		if closer != nil {
+			_ = closer.Close()
+		}
+		time.Sleep(time.Second)
+	}
 }

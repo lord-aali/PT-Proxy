@@ -36,6 +36,7 @@ type Config struct {
 	Debug            bool
 	LogTag           string
 	ReverseAddr      string
+	SkipUDP          bool
 }
 
 var (
@@ -54,6 +55,7 @@ var (
 	cfgSocksPass string
 	cfgDebug     bool
 	cfgReverse   string
+	cfgSkipUDP   bool
 
 	lg ptlog.PTLog
 )
@@ -129,7 +131,11 @@ func unregisterTCP(id uint32) {
 
 type udpSession struct {
 	id       uint32
-	local    *net.UDPConn
+	local    *net.UDPConn // SOCKS ASSOCIATE reply socket (headered replies)
+	pc       *net.UDPConn // raw dualbind socket (byte-pipe replies)
+	raw      bool
+	lastMu   sync.Mutex
+	last     *net.UDPAddr
 	lastSeen atomic.Int64
 }
 
@@ -143,7 +149,9 @@ func registerUDP(s *udpSession) {
 func unregisterUDP(id uint32) {
 	udpMu.Lock()
 	if s, ok := udpMap[id]; ok {
-		s.local.Close()
+		if s.local != nil {
+			s.local.Close()
+		}
 		delete(udpMap, id)
 	}
 	udpMu.Unlock()
@@ -361,6 +369,9 @@ func downloadReadLoop(ctx context.Context, ch *common.Channel, index uint16) {
 				chanMu.Unlock()
 				ch = nch
 				lg.Info("download channel", index, "reconnected")
+				if cfgReverse != "" {
+					sendNow(&common.Frame{ConnID: 0, Type: common.TypeReverseBind, Data: []byte(cfgListen)})
+				}
 				break
 			}
 			continue
@@ -394,6 +405,9 @@ func reconnectUpload(ctx context.Context, index uint16) {
 		}
 		chanMu.Unlock()
 		lg.Info("upload channel", index, "reconnected")
+		if cfgReverse != "" {
+			sendNow(&common.Frame{ConnID: 0, Type: common.TypeReverseBind, Data: []byte(cfgListen)})
+		}
 		return
 	}
 }
@@ -416,8 +430,18 @@ func sendFrames(frames []*common.Frame) {
 	}
 	if err := ch.WriteFrames(frames); err != nil {
 		lg.Error("upload write:", err)
-		go reconnectUpload(context.Background(), ch.Index())
-		return
+		idx := ch.Index()
+		go reconnectUpload(context.Background(), idx)
+		// Retry once after a short wait so the batch is not silently dropped.
+		time.Sleep(500 * time.Millisecond)
+		ch2 := uploadChannel(connID)
+		if ch2 == nil {
+			return
+		}
+		if err2 := ch2.WriteFrames(frames); err2 != nil {
+			lg.Error("upload write retry:", err2)
+			return
+		}
 	}
 	common.GlobalMetrics.FramesSent.Add(int64(len(frames)))
 }
@@ -500,12 +524,23 @@ func dispatch(f *common.Frame) {
 			return
 		}
 		sess.lastSeen.Store(time.Now().UnixNano())
+		common.GlobalMetrics.BytesDown.Add(int64(len(payload)))
+		if sess.raw {
+			sess.lastMu.Lock()
+			dst := sess.last
+			sess.lastMu.Unlock()
+			if dst != nil && sess.pc != nil {
+				_, _ = sess.pc.WriteToUDP(payload, dst)
+			}
+			return
+		}
 		raddr, err := net.ResolveUDPAddr("udp", addr)
 		if err != nil {
 			return
 		}
-		common.GlobalMetrics.BytesDown.Add(int64(len(payload)))
-		_, _ = sess.local.Write(append(buildSocksUDPHeader(raddr), payload...))
+		if sess.local != nil {
+			_, _ = sess.local.Write(append(buildSocksUDPHeader(raddr), payload...))
+		}
 	case common.TypeDNSResp:
 		tcpMu.RLock()
 		vc, ok := tcpMap[f.ConnID]
@@ -660,7 +695,7 @@ func serveTCPForward(ctx context.Context, addr string) error {
 			udp.Close()
 		}
 	}()
-	if udp != nil {
+	if udp != nil && !cfgSkipUDP {
 		go handleUDPRaw(udp)
 	}
 	for {
@@ -680,18 +715,20 @@ func serveTCPForward(ctx context.Context, addr string) error {
 func handleUDPRaw(pc *net.UDPConn) {
 	buf := make([]byte, 65535)
 	id := atomic.AddUint32(&connIDGen, 1)
+	s := &udpSession{id: id, pc: pc, raw: true}
+	s.lastSeen.Store(time.Now().UnixNano())
+	registerUDP(s)
 	sendNow(&common.Frame{ConnID: id, Type: common.TypeOpen, Data: []byte("udp://")})
-	var last *net.UDPAddr
-	go func() {
-		// replies arrive as TypeUDPData on this id via existing handler
-		_ = last
-	}()
 	for {
 		n, from, err := pc.ReadFromUDP(buf)
 		if err != nil {
+			unregisterUDP(id)
 			return
 		}
-		last = from
+		s.lastMu.Lock()
+		s.last = from
+		s.lastMu.Unlock()
+		s.lastSeen.Store(time.Now().UnixNano())
 		sendNow(&common.Frame{ConnID: id, Type: common.TypeUDPData, Data: common.EncodeUDPData(from.String(), buf[:n])})
 	}
 }
@@ -987,6 +1024,7 @@ func applyConfig(c Config) {
 	cfgSocksPass = c.SocksPass
 	cfgDebug = c.Debug
 	cfgReverse = c.ReverseAddr
+	cfgSkipUDP = c.SkipUDP
 }
 
 // Run starts the FTP tunnel client and blocks until ctx is cancelled.

@@ -53,10 +53,12 @@ func NewRedialPacketConn(
 }
 
 // dialLoop repeatedly calls c.dialContext and passes the resulting
-// net.PacketConn to c.exchange. It returns only when c is closed or dialContext
-// returns an error.
+// net.PacketConn to c.exchange. Transient dial failures sleep and retry;
+// permanent close only happens when c is closed.
 func (c *RedialPacketConn) dialLoop() {
 	ctx, cancel := context.WithCancel(context.Background())
+	backoff := time.Second
+	const maxBackoff = 30 * time.Second
 	for {
 		select {
 		case <-c.closed:
@@ -66,10 +68,21 @@ func (c *RedialPacketConn) dialLoop() {
 		}
 		conn, err := c.dialContext(ctx)
 		if err != nil {
-			c.closeWithError(err)
-			cancel()
-			return
+			select {
+			case <-c.closed:
+				cancel()
+				return
+			case <-time.After(backoff):
+			}
+			if backoff < maxBackoff {
+				backoff *= 2
+				if backoff > maxBackoff {
+					backoff = maxBackoff
+				}
+			}
+			continue
 		}
+		backoff = time.Second
 		c.exchange(conn)
 		conn.Close()
 	}

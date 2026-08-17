@@ -75,10 +75,13 @@ func dbg(format string, a ...interface{}) {
 // ─── Session map ──────────────────────────────────────────────────────────────
 
 type session struct {
-	token string
-	mu    sync.Mutex
-	ups   map[uint16]*common.Channel
-	downs map[uint16]*common.Channel
+	token     string
+	mu        sync.Mutex
+	ups       map[uint16]*common.Channel
+	downs     map[uint16]*common.Channel
+	revConnID atomic.Uint32
+	revLn     net.Listener
+	revUDP    *net.UDPConn
 }
 
 var (
@@ -388,7 +391,16 @@ func handleDataConn(raw net.Conn) {
 func readUploadLoop(sess *session, ch *common.Channel) {
 	defer func() {
 		ch.Close()
-		tcpRemoveAll(sess.token) // only if no ups left? keep simple: don't wipe on one channel loss
+		sess.mu.Lock()
+		if cur, ok := sess.ups[ch.Index()]; ok && cur == ch {
+			delete(sess.ups, ch.Index())
+		}
+		empty := len(sess.ups) == 0
+		sess.mu.Unlock()
+		// Only tear down flows when no upload channels remain for this session.
+		if empty {
+			tcpRemoveAll(sess.token)
+		}
 	}()
 	for {
 		frames, err := ch.ReadFrames()
@@ -489,6 +501,7 @@ type udpUpstream struct {
 	token    string
 	connID   uint32
 	conn     *net.UDPConn
+	target   *net.UDPAddr // when set (tagged service), always dial this; ignore frame addr
 	lastSeen atomic.Int64
 }
 
@@ -509,6 +522,14 @@ func udpGetOrCreate(token string, connID uint32) (*udpUpstream, error) {
 		return nil, err
 	}
 	u := &udpUpstream{key: key, token: token, connID: connID, conn: conn}
+	if ext := strings.TrimSpace(cfgTarget); ext != "" {
+		dst, err := net.ResolveUDPAddr("udp", ext)
+		if err != nil {
+			conn.Close()
+			return nil, err
+		}
+		u.target = dst
+	}
 	u.lastSeen.Store(time.Now().UnixNano())
 	udpUps[key] = u
 	go pumpUDP(u)
@@ -599,9 +620,12 @@ func processFrame(token string, f *common.Frame) {
 			return
 		}
 		u.lastSeen.Store(time.Now().UnixNano())
-		raddr, err := net.ResolveUDPAddr("udp", addr)
-		if err != nil {
-			return
+		raddr := u.target
+		if raddr == nil {
+			raddr, err = net.ResolveUDPAddr("udp", addr)
+			if err != nil {
+				return
+			}
 		}
 		common.GlobalMetrics.BytesUp.Add(int64(len(payload)))
 		_, _ = u.conn.WriteTo(payload, raddr)
@@ -1002,11 +1026,27 @@ func applyConfig(c Config) {
 }
 
 func ftpRunReverse(token, listen string) {
+	sess := getOrCreateSession(token)
+	sess.mu.Lock()
+	if sess.revLn != nil {
+		_ = sess.revLn.Close()
+		sess.revLn = nil
+	}
+	if sess.revUDP != nil {
+		_ = sess.revUDP.Close()
+		sess.revUDP = nil
+	}
+	sess.mu.Unlock()
+
 	ln, udp, bound, err := dualbind.Listen(listen)
 	if err != nil {
 		lg.Error("reverse bind:", err)
 		return
 	}
+	sess.mu.Lock()
+	sess.revLn = ln
+	sess.revUDP = udp
+	sess.mu.Unlock()
 	lg.Info("ftp reverse listen", bound)
 	if udp != nil {
 		go func() {
@@ -1027,9 +1067,9 @@ func ftpRunReverse(token, listen string) {
 		if err != nil {
 			return
 		}
-		id := atomic.AddUint32(new(uint32), 1)
+		id := sess.revConnID.Add(1)
 		if id == 0 {
-			id = 1
+			id = sess.revConnID.Add(1)
 		}
 		go func(c net.Conn, id uint32) {
 			defer c.Close()

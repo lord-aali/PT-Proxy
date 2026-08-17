@@ -147,6 +147,13 @@ func (t *Transport) startSession() (*muxSession, error) {
 			case common.MsgReverseOpen:
 				s.pin(hdr.ConnID)
 				go s.tr.handleReverseOpen(hdr.ConnID)
+			case common.MsgUDPPacket:
+				if int(hdr.PayloadLen) > len(payload) {
+					continue
+				}
+				data := make([]byte, hdr.PayloadLen)
+				copy(data, payload[:hdr.PayloadLen])
+				go s.tr.handleReverseUDPPacket(data)
 			case common.MsgData:
 				if int(hdr.PayloadLen) > len(payload) {
 					continue
@@ -280,6 +287,8 @@ func (s *muxSession) deliver(connID uint32, data []byte) {
 	select {
 	case p.ch <- data:
 	case <-p.closed:
+	default:
+		// Drop rather than block the whole session demux (HOL).
 	}
 }
 
