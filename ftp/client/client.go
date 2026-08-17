@@ -652,7 +652,7 @@ func serveTCPForward(ctx context.Context, addr string) error {
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
-	lg.InfoDelayed(time.Second, fmt.Sprintf("Client listening %s", bound))
+	lg.InfoDelayed(time.Second, fmt.Sprintf("Client started listening %s forward via ftp", bound))
 	go func() {
 		<-ctx.Done()
 		ln.Close()

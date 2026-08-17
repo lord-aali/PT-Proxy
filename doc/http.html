@@ -12,18 +12,39 @@
     <main>
       <h1>http</h1>
       <p>An HTTP proxy this process listens for. Typical use: browser or OS “HTTP proxy” pointed at a tunnel client <code>listen</code>, with this block as the tunnel server’s <code>target</code>.</p>
-<pre><code>{ "type": "http", "listen": "127.0.0.1:0", "tag": "webexit" }</code></pre>
+
+      <h2>Use cases</h2>
+      <ul>
+        <li><strong>Forward exit:</strong> HTTPS and HTTP through CONNECT (and absolute-form HTTP) via a camouflage tunnel.</li>
+        <li><strong>Reverse:</strong> publish this proxy on the tunnel server with <code>reverse-tag</code>.</li>
+      </ul>
+
+      <h2>Example JSON</h2>
+<pre><code>{
+  "server": [
+    {
+      "type": "http",
+      "listen": "127.0.0.1:0",
+      "tag": "webexit"
+    }
+  ]
+}</code></pre>
+
+      <h2>Fields</h2>
+      <table>
+        <tr><th>Field</th><th>Required?</th><th>Default</th><th>Meaning / when required</th></tr>
+        <tr><td><code>type</code></td><td>Required</td><td>—</td><td>Must be <code>http</code>.</td></tr>
+        <tr><td><code>listen</code></td><td>Optional</td><td><code>127.0.0.1:0</code></td><td>TCP bind only. Port <code>0</code> = OS assigns a free port.</td></tr>
+        <tr><td><code>tag</code></td><td>Optional</td><td><code>http-</code> + real port</td><td>Name for tunnel <code>target</code> / <code>reverse-tag</code>.</td></tr>
+      </table>
+      <p>TCP only. Tunnels that target this tag do not carry UDP to it.</p>
 
       <h2>Capabilities</h2>
       <ul>
-        <li>HTTP CONNECT — HTTPS and other TCP through the proxy</li>
+        <li>HTTP CONNECT — TCP through the proxy</li>
         <li>Plain HTTP — one request/response to <code>Host</code> (port 80 if omitted)</li>
-        <li>Port <code>0</code> for an ephemeral listen</li>
       </ul>
-      <p>TCP only. Tunnels that target this tag do not carry UDP to it.</p>
-
-      <h2>How it works</h2>
-      <p>CONNECT: dial the requested host, respond <code>200 Connection Established</code>, copy both ways. Other methods: dial the origin, write the request, copy the response. Failed dials return 502.</p>
+      <p>Failed dials return HTTP 502.</p>
     </main>
   </div>
   <script src="nav.js"></script>

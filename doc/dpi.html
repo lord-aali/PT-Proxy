@@ -11,30 +11,122 @@
     <nav id="nav"></nav>
     <main>
       <h1>DPI (HTTP/HTTPS tunnel)</h1>
-      <p>Carries TCP and UDP inside encrypted HTTP(S) requests so the session looks like ordinary web traffic. Good when only HTTPS (or a specific hostname) is allowed. Domain fronting: dial IP in <code>address</code>, set <code>sni</code> and <code>front-host</code> to the allowed name.</p>
+      <p>Carries TCP and UDP inside encrypted HTTP(S) so the session looks like ordinary web traffic. Supports domain fronting, CDN-friendly short POSTs, or a long stream uplink. Forward and reverse on the same server.</p>
 
-      <h2>Capabilities</h2>
+      <h2>Use cases</h2>
       <ul>
-        <li>Forward and reverse (TCP + UDP)</li>
-        <li>HTTP and/or HTTPS listeners; TLS from files, ACME, or a self-signed cert</li>
-        <li>Optional redirect for normal browsers hitting the same port</li>
-        <li>Two uplinks: many short POSTs (<code>post-async</code>, works behind CDNs) or one long upload + download (<code>stream</code>, typically faster on a direct server)</li>
+        <li>Networks that allow HTTPS to a specific hostname (or a CDN) but block raw TCP obfuscation.</li>
+        <li>Forward exit via <code>target</code> to socks/http/external on the server.</li>
+        <li>Reverse: publish a port on the DPI server that reaches a service on the client.</li>
       </ul>
 
-      <h2>Config</h2>
-      <p><strong>Server:</strong> <code>http</code> / <code>https</code>, <code>enc-key</code>, TLS options, optional <code>redirect</code>, optional <code>target</code>.</p>
-      <p><strong>Client:</strong> <code>address</code> URL, <code>listen</code>, <code>enc-key</code>, optional <code>sni</code>, <code>front-host</code>, <code>insecure</code>, <code>uplink</code>, <code>reverse-tag</code>. Reverse uses <code>stream</code>.</p>
+      <h2>Example JSON (HTTPS server + forward client)</h2>
+<pre><code>{
+  "server": [
+    { "type": "socks", "listen": "127.0.0.1:0", "tag": "exit" },
+    {
+      "type": "dpi",
+      "tag": "dpi-public",
+      "target": "exit",
+      "http": "",
+      "https": "0.0.0.0:443",
+      "enc-key": "change-me-shared-key",
+      "protocol": "auto",
+      "self-signed": true,
+      "tls-cert": "",
+      "tls-key": "",
+      "acme-email": "",
+      "acme-domain": "",
+      "cert-dir": "",
+      "redirect": "https://example.com/"
+    }
+  ],
+  "client": [
+    {
+      "type": "dpi",
+      "listen": "127.0.0.1:1080",
+      "address": "https://203.0.113.10:443",
+      "enc-key": "change-me-shared-key",
+      "protocol": "auto",
+      "sni": "",
+      "front-host": "",
+      "insecure": true,
+      "redirect-follow": true,
+      "uplink": "post-async",
+      "verbose": false,
+      "tag": "dpi-fwd"
+    }
+  ]
+}</code></pre>
+      <p>Domain fronting (dial IP in URL, TLS/name for the allowed host):</p>
+<pre><code>{
+  "client": [
+    {
+      "type": "dpi",
+      "listen": "127.0.0.1:1080",
+      "address": "https://203.0.113.10:443",
+      "enc-key": "change-me-shared-key",
+      "sni": "allowed.example",
+      "front-host": "allowed.example",
+      "uplink": "post-async"
+    }
+  ]
+}</code></pre>
+      <p>Reverse client (forces <code>uplink</code> to <code>stream</code>):</p>
+<pre><code>{
+  "server": [
+    { "type": "external", "listen": "127.0.0.1:22", "tag": "ssh" }
+  ],
+  "client": [
+    {
+      "type": "dpi",
+      "listen": "0.0.0.0:2222",
+      "address": "https://203.0.113.10:443",
+      "enc-key": "change-me-shared-key",
+      "reverse-tag": "ssh",
+      "insecure": true
+    }
+  ]
+}</code></pre>
 
-      <h2>How it works</h2>
-      <p>Each flow has a <code>connID</code>. Messages are a 10-byte header (version, type, connID, payload length) then payload, encrypted. Stream uplink frames are length-prefixed. Paths such as <code>/.well-known/cdn-cache/</code>, <code>/api/v2/upload</code>, <code>/api/v2/stream</code>, and <code>/download/session/</code> carry the tunnel.</p>
+      <h2>Server fields</h2>
       <table>
-        <tr><th>Msg</th><th>ID</th><th>Capability</th></tr>
-        <tr><td>Connect</td><td>0x01</td><td>Open a flow; server dials <code>target</code> when set</td></tr>
-        <tr><td>Data / Close</td><td>0x02 / 0x03</td><td>Bytes and teardown</td></tr>
-        <tr><td>UDP</td><td>0x04 / 0x05</td><td>Datagrams (skipped for http targets)</td></tr>
-        <tr><td>ReverseBind / ReverseOpen</td><td>0x07 / 0x09</td><td>Publish a port on the server; incoming TCP becomes a new connID</td></tr>
+        <tr><th>Field</th><th>Required?</th><th>Default</th><th>Meaning / when required</th></tr>
+        <tr><td><code>type</code></td><td>Required</td><td>—</td><td>Must be <code>dpi</code>.</td></tr>
+        <tr><td><code>http</code></td><td>At least one of <code>http</code> / <code>https</code></td><td>empty</td><td>Plain HTTP listen (e.g. <code>0.0.0.0:80</code>). Server refuses to start if both are empty.</td></tr>
+        <tr><td><code>https</code></td><td>At least one of <code>http</code> / <code>https</code></td><td>empty</td><td>HTTPS listen (e.g. <code>0.0.0.0:443</code>). Default tag uses this port when set.</td></tr>
+        <tr><td><code>enc-key</code></td><td>Optional (use a real secret)</td><td><code>default-encryption-key-change-me</code></td><td>Shared with the client. Encrypts tunnel payloads.</td></tr>
+        <tr><td><code>protocol</code></td><td>Optional</td><td><code>auto</code></td><td>Wire protocol selection hint.</td></tr>
+        <tr><td><code>target</code></td><td>Optional</td><td>empty</td><td>Service tag for forward connects. Reverse binds still work when set.</td></tr>
+        <tr><td><code>tag</code></td><td>Optional</td><td><code>dpi-</code> + https or http port</td><td>Log label.</td></tr>
+        <tr><td><code>self-signed</code></td><td>Optional</td><td><code>false</code></td><td>If <code>https</code> is set and you have no files/ACME, set <code>true</code> so the server generates a cert.</td></tr>
+        <tr><td><code>tls-cert</code> / <code>tls-key</code></td><td>Conditional</td><td>empty</td><td>Required for HTTPS when not using <code>self-signed</code> and not using ACME.</td></tr>
+        <tr><td><code>acme-email</code> / <code>acme-domain</code></td><td>Conditional</td><td>empty</td><td>Let’s Encrypt path for HTTPS instead of files or self-signed.</td></tr>
+        <tr><td><code>cert-dir</code></td><td>Optional</td><td>empty</td><td>Where ACME/self-signed material is stored when used.</td></tr>
+        <tr><td><code>redirect</code></td><td>Optional</td><td>empty</td><td>URL for ordinary browser GET/HEAD that is not tunnel traffic.</td></tr>
       </table>
-      <p>Forward: client binds TCP+UDP on <code>listen</code>, each TCP accept is a Connect, UDP shares one assoc. Reverse: client sends ReverseBind; server binds and pushes ReverseOpen; client dials the tagged service.</p>
+      <p class="muted">HTTPS requires exactly one TLS path: <code>self-signed</code>, or <code>tls-cert</code>+<code>tls-key</code>, or <code>acme-email</code>+<code>acme-domain</code>.</p>
+
+      <h2>Client fields</h2>
+      <table>
+        <tr><th>Field</th><th>Required?</th><th>Default</th><th>Meaning / when required</th></tr>
+        <tr><td><code>type</code></td><td>Required</td><td>—</td><td><code>dpi</code>.</td></tr>
+        <tr><td><code>address</code></td><td>Required</td><td>—</td><td>Server URL, e.g. <code>https://host:443</code>. Host is dialed (use the IP here for fronting).</td></tr>
+        <tr><td><code>enc-key</code></td><td>Optional (must match server)</td><td>same built-in default as server</td><td>Must match the server’s key.</td></tr>
+        <tr><td><code>listen</code></td><td>Optional (forward); used as remote bind in reverse</td><td><code>127.0.0.1:1080</code></td><td>Forward: local TCP+UDP for apps. Reverse: bind on the DPI server.</td></tr>
+        <tr><td><code>reverse-tag</code></td><td>Optional</td><td>empty = forward</td><td>Service tag in this file’s <code>server</code> array. When set, uplink becomes <code>stream</code>.</td></tr>
+        <tr><td><code>uplink</code></td><td>Optional</td><td><code>post-async</code></td><td><code>post-async</code> = many short POSTs (CDN-friendly). <code>stream</code> = long upload + download session (typically faster on a direct server). Reverse always uses <code>stream</code>.</td></tr>
+        <tr><td><code>sni</code></td><td>Optional</td><td>empty</td><td>TLS Server Name for fronting.</td></tr>
+        <tr><td><code>front-host</code></td><td>Optional</td><td>empty</td><td>HTTP <code>Host</code> header for fronting.</td></tr>
+        <tr><td><code>insecure</code></td><td>Optional</td><td><code>false</code></td><td><code>true</code> skips TLS verify (self-signed servers).</td></tr>
+        <tr><td><code>redirect-follow</code></td><td>Optional</td><td><code>true</code></td><td>Follow HTTP redirects when negotiating the tunnel.</td></tr>
+        <tr><td><code>protocol</code></td><td>Optional</td><td><code>auto</code></td><td>Match server when set.</td></tr>
+        <tr><td><code>verbose</code></td><td>Optional</td><td><code>false</code></td><td>Extra client logging.</td></tr>
+        <tr><td><code>tag</code></td><td>Optional</td><td><code>type-port</code></td><td>Log label.</td></tr>
+      </table>
+
+      <h2>Wire summary</h2>
+      <p>Flows use a <code>connID</code>. Messages: Connect, Data, Close, UDP, ReverseBind, ReverseOpen. Paths such as <code>/.well-known/cdn-cache/</code>, <code>/api/v2/upload</code>, <code>/api/v2/stream</code>, and <code>/download/session/</code> carry the tunnel.</p>
     </main>
   </div>
   <script src="nav.js"></script>

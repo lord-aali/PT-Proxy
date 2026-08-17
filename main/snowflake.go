@@ -116,7 +116,7 @@ func launchSnowflakeClient(c configuration.JsonClientConfigImpl, tag, reverseAdd
 		lg.Error("snowflake listen:", err)
 		return false
 	}
-	lg.InfoDelayed(time.Second, "snowflake client listening", bound)
+	lg.InfoDelayed(time.Second, "Client started listening", bound, "forward via snowflake")
 	go muxpipe.RunForwardClient(sess, ln, udp)
 	return true
 }

@@ -20,7 +20,7 @@
       <p>Config: service + tunnel with <code>target</code> on the server machine; tunnel client with <code>address</code> and local <code>listen</code>.</p>
 
       <h2>Reverse</h2>
-      <p>The service runs beside the tunnel client (listed under that process’s <code>server</code> array). The public tunnel has no <code>target</code>. The client sets <code>reverse-tag</code> and <code>listen</code> — <code>listen</code> is the address to publish on the tunnel server.</p>
+      <p>The service runs beside the tunnel client (listed under that process’s <code>server</code> array). The client sets <code>reverse-tag</code> and <code>listen</code> — <code>listen</code> is the address to publish on the tunnel server. The same server listener may also have a <code>target</code> for forward clients; omit <code>target</code> for a reverse-only hub.</p>
       <pre><code>Peer  --TCP/UDP-->  server bind (client.listen)  --tunnel-->  client  --dial-->  reverse-tag service</code></pre>
       <p>The client asks the server to bind that address (TCP and UDP). The server replies with the real bound address (useful when the port was <code>0</code>). Each accepted TCP connection becomes a stream to the client, which dials the tagged service. UDP uses a datagram stream and remembers the last peer so replies return correctly.</p>
 

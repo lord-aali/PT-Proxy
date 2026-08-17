@@ -185,7 +185,8 @@ func RequestReverseBind(sess *smux.Session, listen string) (string, error) {
 }
 
 // Serve runs the server side of a mux session.
-// target empty => reverse hub. skipUDP true => do not dial UDP (http).
+// target set => dial that address for forward KindTCP/KindUDP; reverse binds are always accepted.
+// target empty => reverse-only hub (forward streams are dropped). skipUDP true => do not dial UDP (http).
 func Serve(sess *smux.Session, target string, skipUDP bool) {
 	for {
 		st, err := sess.AcceptStream()
@@ -219,9 +220,6 @@ func handleServerStream(sess *smux.Session, st *smux.Stream, target string, skip
 		}
 		relayUDP(st, target, udpConn)
 	case KindRevBind:
-		if target != "" {
-			return
-		}
 		listen, err := readString(st)
 		if err != nil {
 			return

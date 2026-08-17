@@ -58,7 +58,7 @@ func (c Client) Setup(config configuration.JsonClientConfigImpl) (launched bool,
 	if err != nil {
 		c.log.Fatal(err)
 	}
-	c.log.InfoDelayed(time.Second, "Client listening", bound, "forward via", transport)
+	c.log.InfoDelayed(time.Second, "Client started listening", bound, "forward via", transport)
 	listeners = append(listeners, ln)
 	go c.runForward(dial, ln, udp)
 	launched = true

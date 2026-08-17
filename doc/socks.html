@@ -12,19 +12,53 @@
     <main>
       <h1>socks</h1>
       <p>A SOCKS5 proxy this process listens for. Use it as a tunnel <code>target</code> (exit on the server) or as a <code>reverse-tag</code> (proxy on the client, published on the far side).</p>
-<pre><code>{ "type": "socks", "listen": "127.0.0.1:0", "tag": "exit" }</code></pre>
+
+      <h2>Use cases</h2>
+      <ul>
+        <li><strong>Forward exit:</strong> tunnel server <code>target</code> → this tag; apps on the client speak SOCKS5 to the tunnel client’s <code>listen</code>.</li>
+        <li><strong>Reverse publish:</strong> this block in the client’s <code>server</code> list; tunnel client <code>reverse-tag</code> names it; peers speak SOCKS5 to the port bound on the tunnel server.</li>
+      </ul>
+
+      <h2>Example JSON</h2>
+<pre><code>{
+  "server": [
+    {
+      "type": "socks",
+      "listen": "127.0.0.1:0",
+      "tag": "exit",
+      "user": "",
+      "pass": ""
+    }
+  ]
+}</code></pre>
+      <p>With auth:</p>
+<pre><code>{
+  "server": [
+    {
+      "type": "socks",
+      "listen": "127.0.0.1:1080",
+      "tag": "exit",
+      "user": "alice",
+      "pass": "secret"
+    }
+  ]
+}</code></pre>
+
+      <h2>Fields</h2>
+      <table>
+        <tr><th>Field</th><th>Required?</th><th>Default</th><th>Meaning / when required</th></tr>
+        <tr><td><code>type</code></td><td>Required</td><td>—</td><td>Must be <code>socks</code>.</td></tr>
+        <tr><td><code>listen</code></td><td>Optional</td><td><code>127.0.0.1:0</code></td><td>TCP+UDP bind. Port <code>0</code> = OS assigns a free port (shown in logs / default tag).</td></tr>
+        <tr><td><code>tag</code></td><td>Optional</td><td><code>socks-</code> + real port</td><td>Name used by tunnel <code>target</code> / <code>reverse-tag</code>.</td></tr>
+        <tr><td><code>user</code> / <code>pass</code></td><td>Optional</td><td>empty = no auth</td><td>If either is set, SOCKS username/password auth is enabled. Leave both empty for open SOCKS (typical on loopback).</td></tr>
+      </table>
 
       <h2>Capabilities</h2>
       <ul>
-        <li>SOCKS5 CONNECT (TCP) to any destination the host can reach</li>
+        <li>SOCKS5 CONNECT (TCP)</li>
         <li>UDP ASSOCIATE on the <strong>same</strong> port as TCP</li>
-        <li>Optional username/password (<code>user</code> / <code>pass</code>)</li>
-        <li>Port <code>0</code> — OS assigns a free port; the tag includes that port if you omit <code>tag</code></li>
       </ul>
-      <p>Applications speak SOCKS5 to whatever address reaches this daemon (often the tunnel client’s <code>listen</code> in forward mode, or the reverse bind on the VPS).</p>
-
-      <h2>How it works</h2>
-      <p>TCP: standard SOCKS5 server. UDP: packets with a SOCKS5 UDP header are decoded, sent to the destination, and replies are wrapped and returned to that client. ASSOCIATE reports the listen IP so apps can send datagrams to this port.</p>
+      <p>Applications speak SOCKS5 to whatever address reaches this daemon (often the tunnel client’s <code>listen</code> in forward mode, or the reverse bind on the tunnel server).</p>
     </main>
   </div>
   <script src="nav.js"></script>

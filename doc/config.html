@@ -23,11 +23,12 @@
         <tr><td><code>type</code></td><td>every block</td><td>socks, http, external, obfs2/3/4, dpi, snowflake, ftp</td></tr>
         <tr><td><code>tag</code></td><td>every block</td><td>Name used by <code>target</code> and <code>reverse-tag</code>. If omitted: <code>type-port</code> after bind. Port <code>0</code> uses the assigned port. DPI uses the HTTPS port if set, else HTTP.</td></tr>
         <tr><td><code>listen</code></td><td>most blocks</td><td>Bind address. For <strong>external</strong>, the address to dial.</td></tr>
-        <tr><td><code>target</code></td><td>tunnel server</td><td>Tag of the service to reach. Empty: this tunnel accepts reverse binds from clients.</td></tr>
+        <tr><td><code>target</code></td><td>tunnel server</td><td>Tag for forward streams. Reverse binds are always allowed on the same listener. Empty: reverse-only hub.</td></tr>
         <tr><td><code>reverse-tag</code></td><td>tunnel client</td><td>Tag of a service in this file’s <code>server</code> list. Set: reverse; <code>listen</code> is published on the tunnel server. Empty: forward; <code>listen</code> is local.</td></tr>
         <tr><td><code>address</code></td><td>tunnel client</td><td>Tunnel server (host:port or URL).</td></tr>
       </table>
       <p>TCP and UDP share the same <code>host:port</code>. There is no protocol field in JSON. An <code>http</code> target is TCP-only.</p>
+      <p>Full JSON examples and per-field required/optional notes are on each protocol page: <a href="socks.html">socks</a>, <a href="http.html">http</a>, <a href="external.html">external</a>, <a href="obfs.html">obfs</a>, <a href="dpi.html">dpi</a>, <a href="snowflake.html">snowflake</a>, <a href="ftp.html">ftp</a>.</p>
 
       <h2>Defaults</h2>
       <table>

@@ -11,20 +11,50 @@
     <nav id="nav"></nav>
     <main>
       <h1>external</h1>
-      <p>A name for a process that already listens somewhere. <code>listen</code> is the address to dial (SSH, a game, DNS, Tor ORPort, …). It is required.</p>
-<pre><code>{ "type": "external", "listen": "127.0.0.1:22", "tag": "ssh" }</code></pre>
-      <p>Default tag is <code>external-</code> plus that port (<code>external-22</code>).</p>
+      <p>A name for a process that already listens somewhere. <code>listen</code> is the address to dial (SSH, a game, DNS, Tor ORPort, …). Nothing is bound by this block.</p>
+
+      <h2>Use cases</h2>
+      <ul>
+        <li><strong>Forward:</strong> tunnel client local port ↔ this address on the server machine.</li>
+        <li><strong>Reverse:</strong> this address on the client machine ↔ a port bound on the tunnel server.</li>
+        <li><strong>Tor ORPort:</strong> obfs server <code>target</code> → this tag; raw TCP clients are spliced here.</li>
+      </ul>
+
+      <h2>Example JSON</h2>
+<pre><code>{
+  "server": [
+    {
+      "type": "external",
+      "listen": "127.0.0.1:22",
+      "tag": "ssh"
+    }
+  ]
+}</code></pre>
+      <p>UDP service (same host:port for TCP and UDP):</p>
+<pre><code>{
+  "server": [
+    {
+      "type": "external",
+      "listen": "127.0.0.1:53",
+      "tag": "dns"
+    }
+  ]
+}</code></pre>
+
+      <h2>Fields</h2>
+      <table>
+        <tr><th>Field</th><th>Required?</th><th>Default</th><th>Meaning / when required</th></tr>
+        <tr><td><code>type</code></td><td>Required</td><td>—</td><td>Must be <code>external</code>.</td></tr>
+        <tr><td><code>listen</code></td><td>Required</td><td>none</td><td>Dial address of the backend (<code>host:port</code>). The process refuses to start this block if empty.</td></tr>
+        <tr><td><code>tag</code></td><td>Optional</td><td><code>external-</code> + port from <code>listen</code></td><td>Name for tunnel <code>target</code> / <code>reverse-tag</code>.</td></tr>
+      </table>
 
       <h2>Capabilities</h2>
       <ul>
-        <li>Forward: tunnel client local port ↔ this address</li>
-        <li>Reverse: this address (on the client machine) ↔ a port bound on the tunnel server</li>
-        <li>TCP streams and UDP datagrams to the same host:port</li>
+        <li>TCP streams to that host:port</li>
+        <li>UDP datagrams to the same host:port</li>
       </ul>
       <p>A TCP-only backend simply never sees UDP; a UDP-only backend never accepts TCP.</p>
-
-      <h2>How it works</h2>
-      <p>Nothing is bound. The registry stores the address. Tunnels <code>Dial("tcp", addr)</code> per stream and send UDP to that host:port. On obfs, a single raw TCP client (for example Tor to an ORPort) is spliced to this address without multiplexing.</p>
     </main>
   </div>
   <script src="nav.js"></script>

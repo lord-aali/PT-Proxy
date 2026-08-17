@@ -11,21 +11,102 @@
     <nav id="nav"></nav>
     <main>
       <h1>Snowflake</h1>
-      <p>A WebSocket relay with TurboTunnel, KCP, and smux. The session looks like a website WebSocket. Optional WSS. Optional domain fronting via <code>sni</code> and <code>front-host</code>. Optional upstream proxy to reach the WebSocket.</p>
+      <p>A WebSocket relay with TurboTunnel, KCP, and smux. Looks like a website WebSocket. Carries TCP and UDP; forward and reverse on the same listener when <code>target</code> is set.</p>
 
-      <h2>Capabilities</h2>
+      <h2>Use cases</h2>
       <ul>
-        <li>Forward and reverse (TCP + UDP over smux)</li>
-        <li><code>ws://</code> and <code>wss://</code></li>
-        <li>Custom TLS SNI and Host header</li>
+        <li>Environments where WebSocket (or WSS) is allowed but raw TCP is not.</li>
+        <li>Optional domain fronting via <code>sni</code> / <code>front-host</code>.</li>
+        <li>Reach the WebSocket through an upstream proxy (<code>proxy</code>).</li>
       </ul>
 
-      <h2>Config</h2>
-      <p><strong>Server:</strong> <code>listen</code> (default <code>0.0.0.0:8080</code>), optional <code>tls-cert</code> / <code>tls-key</code>, optional <code>target</code>.</p>
-      <p><strong>Client:</strong> <code>address</code> WebSocket URL, <code>listen</code>, optional <code>sni</code>, <code>front-host</code>, <code>proxy</code>, <code>insecure</code>, <code>reverse-tag</code>.</p>
+      <h2>Example JSON (forward)</h2>
+<pre><code>{
+  "server": [
+    { "type": "socks", "listen": "127.0.0.1:0", "tag": "exit" },
+    {
+      "type": "snowflake",
+      "listen": "0.0.0.0:8080",
+      "tag": "sf-public",
+      "target": "exit",
+      "tls-cert": "",
+      "tls-key": ""
+    }
+  ],
+  "client": [
+    {
+      "type": "snowflake",
+      "listen": "127.0.0.1:1080",
+      "address": "ws://203.0.113.10:8080/",
+      "sni": "",
+      "front-host": "",
+      "proxy": "",
+      "insecure": false,
+      "tag": "sf-fwd"
+    }
+  ]
+}</code></pre>
+      <p>WSS server + client:</p>
+<pre><code>{
+  "server": [
+    {
+      "type": "snowflake",
+      "listen": "0.0.0.0:443",
+      "target": "exit",
+      "tls-cert": "/path/to/fullchain.pem",
+      "tls-key": "/path/to/privkey.pem"
+    }
+  ],
+  "client": [
+    {
+      "type": "snowflake",
+      "listen": "127.0.0.1:1080",
+      "address": "wss://203.0.113.10:443/",
+      "insecure": false
+    }
+  ]
+}</code></pre>
+      <p>Reverse client:</p>
+<pre><code>{
+  "server": [
+    { "type": "external", "listen": "127.0.0.1:22", "tag": "ssh" }
+  ],
+  "client": [
+    {
+      "type": "snowflake",
+      "listen": "0.0.0.0:2222",
+      "address": "ws://203.0.113.10:8080/",
+      "reverse-tag": "ssh"
+    }
+  ]
+}</code></pre>
+
+      <h2>Server fields</h2>
+      <table>
+        <tr><th>Field</th><th>Required?</th><th>Default</th><th>Meaning / when required</th></tr>
+        <tr><td><code>type</code></td><td>Required</td><td>—</td><td><code>snowflake</code>.</td></tr>
+        <tr><td><code>listen</code></td><td>Optional</td><td><code>0.0.0.0:8080</code></td><td>HTTP(S) bind for the WebSocket upgrade.</td></tr>
+        <tr><td><code>target</code></td><td>Optional</td><td>empty (reverse-only hub)</td><td>Service tag for forward streams. Reverse binds are always allowed.</td></tr>
+        <tr><td><code>tag</code></td><td>Optional</td><td><code>snowflake-port</code></td><td>Log label.</td></tr>
+        <tr><td><code>tls-cert</code> / <code>tls-key</code></td><td>Optional together</td><td>empty = plain HTTP (ws)</td><td>Both required for WSS. Paths to PEM cert and key.</td></tr>
+      </table>
+
+      <h2>Client fields</h2>
+      <table>
+        <tr><th>Field</th><th>Required?</th><th>Default</th><th>Meaning / when required</th></tr>
+        <tr><td><code>type</code></td><td>Required</td><td>—</td><td><code>snowflake</code>.</td></tr>
+        <tr><td><code>address</code></td><td>Required</td><td>—</td><td><code>ws://host:port/</code> or <code>wss://host:port/</code>.</td></tr>
+        <tr><td><code>listen</code></td><td>Optional (forward); remote bind in reverse</td><td><code>127.0.0.1:1080</code></td><td>Forward: local TCP+UDP. Reverse: address published on the server.</td></tr>
+        <tr><td><code>reverse-tag</code></td><td>Optional</td><td>empty = forward</td><td>Service tag in this file’s <code>server</code> array.</td></tr>
+        <tr><td><code>sni</code></td><td>Optional</td><td>empty</td><td>TLS Server Name (fronting / WSS).</td></tr>
+        <tr><td><code>front-host</code></td><td>Optional</td><td>empty</td><td>HTTP <code>Host</code> header for fronting.</td></tr>
+        <tr><td><code>proxy</code></td><td>Optional</td><td>empty</td><td>Upstream proxy URL used to reach the WebSocket (e.g. <code>socks5://127.0.0.1:9050</code>).</td></tr>
+        <tr><td><code>insecure</code></td><td>Optional</td><td><code>false</code></td><td>Skip TLS verify for WSS.</td></tr>
+        <tr><td><code>tag</code></td><td>Optional</td><td><code>type-port</code></td><td>Log label.</td></tr>
+      </table>
 
       <h2>How it works</h2>
-      <p>HTTP upgrades to WebSocket. A token and client ID select a packet queue. KCP runs in stream mode over those packets, then smux v2. Each smux session multiplexes TCP pipes, UDP, and reverse binds (same stream kinds as <a href="muxpipe.html">muxpipe</a>).</p>
+      <p>HTTP upgrades to WebSocket. A token and client ID select a packet queue. KCP runs in stream mode, then smux v2. Stream kinds match <a href="muxpipe.html">muxpipe</a> (TCP, UDP, reverse bind/open).</p>
     </main>
   </div>
   <script src="nav.js"></script>

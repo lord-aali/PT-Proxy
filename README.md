@@ -1,6 +1,6 @@
 # PT Proxy
 
-PT Proxy is a single binary that runs censorship-circumvention tunnels from one JSON file. You can run a public bridge, a laptop client, or both in the same process.
+PT Proxy is a single binary that runs censorship-circumvention tunnels from one JSON file. You can run a public bridge, a client, or both in the same process.
 
 You compose **services** (`socks`, `http`, `external`) and **tunnels** (obfs, DPI, Snowflake, FTP). Tags wire them for forward or reverse pipes.
 
@@ -23,7 +23,7 @@ Full protocol instructions and implementation notes are the wiki in [`doc/`](doc
 
 ## How a forward tunnel works
 
-A forward tunnel means: the interesting service lives on the **server** machine (or something that machine can reach), and you want it to show up on your laptop as a local port.
+A forward tunnel means: the interesting service lives on the **server** machine (or something that machine can reach), and you want it to show up on the client as a local port.
 
 You declare the service in the `server` list — SOCKS5, HTTP CONNECT, or an existing process (`external`). Give it a `tag`, or let PT Proxy name it `type-port` after it binds. The tunnel server (obfs, DPI, Snowflake, FTP) sets `target` to that tag and pipes bytes there.
 
@@ -35,7 +35,7 @@ Order of events: the service starts and gets a tag → the tunnel server starts 
 
 A reverse tunnel means: the interesting service is on **your** machine (or LAN), and you want the VPS to publish a port that reaches it.
 
-The client still lists that service under `server`. That array means “services this process owns,” not “I am the public bridge.” The tunnel **client** sets `reverse-tag` to that tag and uses `listen` as the host:port that should appear **on the VPS**. The VPS tunnel entry has **no** `target`; it is only a hub. After the client connects, the hub binds that `listen` (TCP and UDP). Someone hitting the VPS port is forwarded back to the laptop service.
+The client still lists that service under `server`. That array means “services this process owns,” not “I am the public bridge.” The tunnel **client** sets `reverse-tag` to that tag and uses `listen` as the host:port that should appear **on the VPS**. The VPS tunnel may omit `target` (reverse-only hub) or keep a `target` for forward clients on the same listener. After the client connects, the hub binds that `listen` (TCP and UDP). Someone hitting the VPS port is forwarded back to the client service.
 
 If `reverse-tag` is missing, PT Proxy logs an error and skips that client.
 
@@ -102,7 +102,7 @@ client `listen` on `127.0.0.1:2222`. Then try `ssh -p 2222 127.0.0.1`.
 
 ### 4. Expose client's SSH on the VPS
 
-sshd is in client machine. Third-party clients should `ssh <vps_ip> -p 2222`.
+sshd runs on the client. Third-party peers should `ssh <vps_ip> -p 2222`.
 
 **Client**
 
@@ -125,9 +125,9 @@ sshd is in client machine. Third-party clients should `ssh <vps_ip> -p 2222`.
   ]
 }
 ```
-Server config comes with no `target`, just a hub.
+Server config can omit `target` (reverse-only hub) or keep a `target` if the same listener also serves forward clients.
 
-The client asks the hub to bind `0.0.0.0:2222`. Each connection there is dialed to `127.0.0.1:22` on the laptop.
+The client asks the hub to bind `0.0.0.0:2222`. Each connection there is dialed to `127.0.0.1:22` on the client.
 
 ### 5. Publish a local SOCKS on a public port
 **VPS:**
@@ -149,7 +149,7 @@ The client asks the hub to bind `0.0.0.0:2222`. Each connection there is dialed 
   ]
 }
 ```
-Run `socks` in the client `server` list, and a reverse client whose `reverse-tag` is that socks. The VPS binds a public port. Remote users speak SOCKS to the VPS; the daemon answering is on the laptop.
+Run `socks` in the client `server` list, and a reverse client whose `reverse-tag` is that socks. The VPS binds a public port. Remote users speak SOCKS to the VPS; the daemon answering is on the client.
 
 
 ## Field cheat sheet
@@ -157,7 +157,7 @@ Run `socks` in the client `server` list, and a reverse client whose `reverse-tag
 | Field | Where | Meaning |
 |-------|--------|---------|
 | `tag` | any block | Handle for `target` / `reverse-tag`. Default `type-port` after bind (port `0` uses the assigned port). |
-| `target` | tunnel **server** | Pipe to this service tag. Omitted = reverse hub. |
+| `target` | tunnel **server** | Pipe forward streams to this service tag. Reverse binds are always allowed. Omitted = reverse-only hub. |
 | `reverse-tag` | tunnel **client** | Service tag in **this file’s** `server` list. Set = reverse; `listen` is the bind on the PT server. Omitted = forward; `listen` is local. |
 | `listen` | socks/http | Bind address. Default `127.0.0.1:0`. |
 | `listen` | external | Required dial address of the real backend. No default. |

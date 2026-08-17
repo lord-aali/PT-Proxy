@@ -11,22 +11,80 @@
     <nav id="nav"></nav>
     <main>
       <h1>obfs2, obfs3, obfs4</h1>
-      <p>Obfuscated TCP transports (the same family Tor uses as pluggable transports). Traffic looks like random bytes after a handshake. obfs4 uses a cert/key pair; IAT mode is always <code>0</code>.</p>
+      <p>Obfuscated TCP transports. After the handshake, traffic looks like random bytes. Carries TCP and UDP (framed). Supports forward pipes to a tagged service and reverse binds on the same listener. obfs4 can also splice a raw TCP client (for example Tor) to an <code>external</code> target.</p>
 
-      <h2>Capabilities</h2>
+      <h2>Use cases</h2>
       <ul>
-        <li>Forward and reverse pipes (TCP + UDP inside a mux session)</li>
-        <li>A raw TCP splice to <code>target</code> for clients that do not mux (including Tor to an ORPort behind <code>external</code>)</li>
-        <li>obfs4 identity persisted in config.json (or printed with <code>-gencert</code>)</li>
+        <li><strong>Forward:</strong> apps on the client reach a <code>socks</code> / <code>http</code> / <code>external</code> service on the server through an obfuscated link.</li>
+        <li><strong>Reverse:</strong> publish a port on the server that reaches a service listed in the client’s <code>server</code> array.</li>
+        <li><strong>Both on one listen:</strong> set <code>target</code> for forward clients; reverse clients still work on the same port.</li>
+        <li><strong>Tor ORPort:</strong> <code>target</code> points at an <code>external</code> ORPort; non-mux TCP is spliced there.</li>
       </ul>
 
-      <h2>Config</h2>
-      <p><strong>Server:</strong> <code>listen</code> (default <code>0.0.0.0:3334</code>), optional <code>target</code>, obfs4 <code>cert</code> and <code>private-key</code> (created on first run if empty).</p>
-      <p><strong>Client:</strong> <code>address</code> host:port, obfs4 <code>cert</code>, <code>listen</code> (local in forward, published on the server in reverse), optional <code>reverse-tag</code>.</p>
+      <h2>Example JSON (forward + reverse on one server)</h2>
+<pre><code>{
+  "server": [
+    { "type": "socks", "listen": "127.0.0.1:0", "tag": "exit" },
+    {
+      "type": "obfs4",
+      "listen": "0.0.0.0:3334",
+      "tag": "obfs-public",
+      "target": "exit",
+      "cert": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      "private-key": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    }
+  ],
+  "client": [
+    {
+      "type": "obfs4",
+      "listen": "127.0.0.1:1080",
+      "address": "203.0.113.10:3334",
+      "cert": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      "tag": "obfs-fwd"
+    }
+  ]
+}</code></pre>
+      <p>Reverse client (same server listen; service lives in this process’s <code>server</code> list):</p>
+<pre><code>{
+  "server": [
+    { "type": "external", "listen": "127.0.0.1:22", "tag": "ssh" }
+  ],
+  "client": [
+    {
+      "type": "obfs4",
+      "listen": "0.0.0.0:2222",
+      "address": "203.0.113.10:3334",
+      "cert": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      "reverse-tag": "ssh"
+    }
+  ]
+}</code></pre>
+
+      <h2>Server fields</h2>
+      <table>
+        <tr><th>Field</th><th>Required?</th><th>Default</th><th>Meaning / when required</th></tr>
+        <tr><td><code>type</code></td><td>Required</td><td>—</td><td><code>obfs2</code>, <code>obfs3</code>, or <code>obfs4</code>.</td></tr>
+        <tr><td><code>listen</code></td><td>Required in practice</td><td>(must be a bindable host:port)</td><td>Public TCP bind for the tunnel. Common value: <code>0.0.0.0:3334</code>.</td></tr>
+        <tr><td><code>tag</code></td><td>Optional</td><td><code>type-port</code> after bind</td><td>Name in logs. Port <code>0</code> uses the assigned port in the default tag.</td></tr>
+        <tr><td><code>target</code></td><td>Optional</td><td>empty (reverse-only hub)</td><td>Service tag for <strong>forward</strong> streams. Reverse binds are always allowed. Omit for reverse-only.</td></tr>
+        <tr><td><code>cert</code></td><td>obfs4: required to keep identity (or auto-filled)</td><td>generated on first run if empty</td><td>obfs4 only. Client must use the same value. Use <code>-gencert</code> to print a pair. Ignored for obfs2/obfs3.</td></tr>
+        <tr><td><code>private-key</code></td><td>Required with <code>cert</code> for obfs4</td><td>generated with <code>cert</code></td><td>obfs4 only. Hex private key matching <code>cert</code>. Do not put this on the client.</td></tr>
+      </table>
+      <p class="muted">IAT mode is fixed to <code>0</code> (not a JSON field).</p>
+
+      <h2>Client fields</h2>
+      <table>
+        <tr><th>Field</th><th>Required?</th><th>Default</th><th>Meaning / when required</th></tr>
+        <tr><td><code>type</code></td><td>Required</td><td>—</td><td>Must match the server (<code>obfs2</code> / <code>obfs3</code> / <code>obfs4</code>).</td></tr>
+        <tr><td><code>address</code></td><td>Required</td><td>—</td><td>Server <code>host:port</code>.</td></tr>
+        <tr><td><code>listen</code></td><td>Optional (forward); required for reverse intent</td><td><code>127.0.0.1:1080</code> (forward)</td><td>Forward: local TCP+UDP bind for apps. Reverse: address to publish on the <strong>server</strong>.</td></tr>
+        <tr><td><code>cert</code></td><td>Required for obfs4</td><td>—</td><td>Copy from the server’s <code>cert</code>. Not used for obfs2/obfs3.</td></tr>
+        <tr><td><code>reverse-tag</code></td><td>Optional</td><td>empty = forward</td><td>Tag of a service in <strong>this file’s</strong> <code>server</code> array. Set = reverse mode.</td></tr>
+        <tr><td><code>tag</code></td><td>Optional</td><td><code>type-port</code></td><td>Log label.</td></tr>
+      </table>
 
       <h2>How it works</h2>
-      <p>Server accepts TCP, completes the obfs handshake, then either starts a mux session (<code>PTPXMUX1</code> + smux) or splices raw TCP to <code>target</code>. Client dials with <code>cert</code> and <code>iat-mode=0</code>, then muxes: local TCP+UDP listen in forward, or a reverse bind request plus dials to the tagged service. Sessions reconnect if the link drops; the local listen stays up in forward mode.</p>
-      <p>obfs4 <code>cert</code> is base64 of node ID + ntor public key (padding stripped). Private key is hex. A new length-obfuscation seed is drawn each start.</p>
+      <p>Server accepts TCP, completes the obfs handshake, then either starts a mux session (<code>PTPXMUX1</code> + smux) or splices raw TCP to <code>target</code>. Client dials with <code>cert</code> (obfs4) and muxes: local TCP+UDP listen in forward, or a reverse bind plus dials to the tagged service. Sessions reconnect if the link drops; the local listen stays up in forward mode.</p>
     </main>
   </div>
   <script src="nav.js"></script>

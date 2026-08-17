@@ -11,27 +11,109 @@
     <nav id="nav"></nav>
     <main>
       <h1>FTP tunnel</h1>
-      <p>An FTP/FTPS control connection plus persistent PASV data sockets. Control looks like FTP; data files look like website assets. Encrypted frame batches ride STOR/RETR.</p>
+      <p>FTP/FTPS control plus persistent PASV data sockets. Control looks like FTP; data files look like web assets. Encrypted frame batches carry TCP and UDP. Forward and reverse are supported.</p>
 
-      <h2>Capabilities</h2>
+      <h2>Use cases</h2>
       <ul>
-        <li>Forward and reverse (TCP + UDP)</li>
-        <li>Plain FTP or FTPS (TLS on control and data)</li>
-        <li>Several parallel upload and download channels</li>
-        <li>Optional decoy LIST/RETR cover traffic</li>
-        <li>PASV IP and port ranges for NAT; optional override addresses on the client</li>
+        <li>Networks that allow FTP/FTPS outbound but block other tunnels.</li>
+        <li>Multiple parallel upload/download channels for throughput.</li>
+        <li>Optional decoy LIST/RETR cover traffic.</li>
       </ul>
 
-      <h2>Config</h2>
-      <p><strong>Server:</strong> <code>listen</code> (default <code>0.0.0.0:21</code>), <code>user</code> / <code>pass</code>, <code>enc-key</code>, <code>pasv-ip</code>, <code>upload-ports</code> / <code>download-ports</code>, optional TLS files, optional <code>target</code>.</p>
-      <p><strong>Client:</strong> <code>address</code> FTP host:port, same credentials and key, <code>listen</code>, channel counts, optional PASV overrides, <code>decoy</code>, <code>reverse-tag</code>.</p>
+      <h2>Example JSON (forward)</h2>
+<pre><code>{
+  "server": [
+    { "type": "socks", "listen": "127.0.0.1:0", "tag": "exit" },
+    {
+      "type": "ftp",
+      "listen": "0.0.0.0:21",
+      "tag": "ftp-public",
+      "target": "exit",
+      "user": "tunnel",
+      "pass": "secret",
+      "enc-key": "change-me-please",
+      "pasv-ip": "203.0.113.10",
+      "upload-ports": "8080-8800",
+      "download-ports": "8080-8800",
+      "tls": false,
+      "tls-cert": "",
+      "tls-key": ""
+    }
+  ],
+  "client": [
+    {
+      "type": "ftp",
+      "listen": "127.0.0.1:1080",
+      "address": "203.0.113.10:21",
+      "user": "tunnel",
+      "pass": "secret",
+      "enc-key": "change-me-please",
+      "upload-channels": 1,
+      "download-channels": 1,
+      "override-up-addr": "",
+      "override-down-addr": "",
+      "decoy": false,
+      "tls": false,
+      "verbose": false,
+      "tag": "ftp-fwd"
+    }
+  ]
+}</code></pre>
+      <p>Reverse client:</p>
+<pre><code>{
+  "server": [
+    { "type": "external", "listen": "127.0.0.1:22", "tag": "ssh" }
+  ],
+  "client": [
+    {
+      "type": "ftp",
+      "listen": "0.0.0.0:2222",
+      "address": "203.0.113.10:21",
+      "user": "tunnel",
+      "pass": "secret",
+      "enc-key": "change-me-please",
+      "reverse-tag": "ssh"
+    }
+  ]
+}</code></pre>
 
-      <h2>How it works</h2>
-      <p>Login, PASV, then long-lived data connections named with a session token. Frames: ConnID, type, seq, data; batches sealed with AES-256-GCM (key = SHA-256 of the passphrase).</p>
+      <h2>Server fields</h2>
       <table>
-        <tr><th>Type</th><th>ID</th><th>Capability</th></tr>
-        <tr><td>Data</td><td>0x01</td><td>TCP payload (seq-reordered)</td></tr>
-        <tr><td>Open</td><td>0x02</td><td>TCP to an address, or UDP; server may always dial <code>target</code></td></tr>
+        <tr><th>Field</th><th>Required?</th><th>Default</th><th>Meaning / when required</th></tr>
+        <tr><td><code>type</code></td><td>Required</td><td>—</td><td><code>ftp</code>.</td></tr>
+        <tr><td><code>listen</code></td><td>Optional</td><td><code>0.0.0.0:21</code></td><td>FTP control listen address.</td></tr>
+        <tr><td><code>user</code> / <code>pass</code></td><td>Optional</td><td><code>tunnel</code> / <code>secret</code></td><td>FTP login. Client must match.</td></tr>
+        <tr><td><code>enc-key</code></td><td>Optional (use a real secret)</td><td><code>change-me-please</code></td><td>Shared key for AES-GCM frame batches. Client must match.</td></tr>
+        <tr><td><code>pasv-ip</code></td><td>Strongly recommended on public hosts</td><td>empty</td><td>Public IP advertised in PASV (227). Without it, clients may get a private IP.</td></tr>
+        <tr><td><code>upload-ports</code> / <code>download-ports</code></td><td>Optional</td><td><code>8080-8800</code></td><td>Single port or <code>N-M</code> range for PASV data sockets.</td></tr>
+        <tr><td><code>target</code></td><td>Optional</td><td>empty</td><td>Service tag for forward opens. Reverse binds still work when set.</td></tr>
+        <tr><td><code>tag</code></td><td>Optional</td><td><code>ftp-port</code></td><td>Log label.</td></tr>
+        <tr><td><code>tls</code></td><td>Optional</td><td><code>false</code></td><td>Enable FTPS. When <code>true</code>, <code>tls-cert</code> and <code>tls-key</code> are required.</td></tr>
+        <tr><td><code>tls-cert</code> / <code>tls-key</code></td><td>Required if <code>tls</code> is true</td><td>empty</td><td>PEM paths for control/data TLS.</td></tr>
+      </table>
+
+      <h2>Client fields</h2>
+      <table>
+        <tr><th>Field</th><th>Required?</th><th>Default</th><th>Meaning / when required</th></tr>
+        <tr><td><code>type</code></td><td>Required</td><td>—</td><td><code>ftp</code>.</td></tr>
+        <tr><td><code>address</code></td><td>Required</td><td>—</td><td>FTP server <code>host:port</code>.</td></tr>
+        <tr><td><code>listen</code></td><td>Optional (forward); remote bind in reverse</td><td><code>127.0.0.1:1080</code></td><td>Forward: local TCP+UDP. Reverse: bind on the FTP tunnel server.</td></tr>
+        <tr><td><code>user</code> / <code>pass</code></td><td>Optional</td><td><code>tunnel</code> / <code>secret</code></td><td>Must match server.</td></tr>
+        <tr><td><code>enc-key</code></td><td>Optional</td><td><code>change-me-please</code></td><td>Must match server.</td></tr>
+        <tr><td><code>upload-channels</code> / <code>download-channels</code></td><td>Optional</td><td><code>1</code> / <code>1</code></td><td>Parallel PASV data connections. Values below 1 become 1.</td></tr>
+        <tr><td><code>override-up-addr</code> / <code>override-down-addr</code></td><td>Optional</td><td>empty</td><td>When NAT remaps PASV, force the data endpoint the client dials.</td></tr>
+        <tr><td><code>decoy</code></td><td>Optional</td><td><code>false</code></td><td>Generate cover LIST/RETR traffic.</td></tr>
+        <tr><td><code>tls</code></td><td>Optional</td><td><code>false</code></td><td>Use FTPS to match a TLS server.</td></tr>
+        <tr><td><code>reverse-tag</code></td><td>Optional</td><td>empty = forward</td><td>Service tag in this file’s <code>server</code> array.</td></tr>
+        <tr><td><code>verbose</code></td><td>Optional</td><td><code>false</code></td><td>Extra logging.</td></tr>
+        <tr><td><code>tag</code></td><td>Optional</td><td><code>type-port</code></td><td>Log label.</td></tr>
+      </table>
+
+      <h2>Frame types (capability)</h2>
+      <table>
+        <tr><th>Type</th><th>ID</th><th>Role</th></tr>
+        <tr><td>Data</td><td>0x01</td><td>TCP payload</td></tr>
+        <tr><td>Open</td><td>0x02</td><td>Open TCP or UDP; server may dial <code>target</code></td></tr>
         <tr><td>Close / Ack / heartbeat</td><td>0x03–0x06</td><td>Lifecycle</td></tr>
         <tr><td>UDP data</td><td>0x07</td><td>Address + payload</td></tr>
         <tr><td>DNS</td><td>0x08 / 0x09</td><td>DNS request/response</td></tr>
