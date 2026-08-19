@@ -175,7 +175,7 @@ Classic obfuscated TCP (the Tor pluggable-transport family). **Server:** `listen
 
 ### DPI (HTTP/HTTPS tunnel)
 
-Traffic is wrapped in encrypted HTTP. **Server:** `http` / `https`, `enc-key`, TLS (`tls-cert`/`tls-key`, `self-signed`, or ACME), optional `redirect`, optional `target`. **Client:** `address` (URL), `listen`, optional `sni`, `front-host`, `enc-key`, `uplink`.
+Traffic is wrapped in encrypted HTTP. **Server:** `http` / `https`, `enc-key`, TLS (`tls-cert`/`tls-key`, `self-signed`, or ACME), optional `redirect`, `serve-dir`, `backend`, `target`. **Client:** `address` (URL), `listen`, optional `sni`, `front-host`, `enc-key`, `uplink`.
 
 Fronting: dial IP in `address`, `sni` and `front-host` set to the allowed hostname.
 

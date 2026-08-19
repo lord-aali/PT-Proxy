@@ -47,6 +47,8 @@ func launchDpiServer(c configuration.JsonServerConfigImpl, tag, target string, s
 		LogTag:        tag,
 		Target:        target,
 		SkipUDP:       skipUDP,
+		ServeDir:      c.ServeDir,
+		Backend:       c.Backend,
 	}
 
 	if cfg.HTTPAddr == "" && cfg.HTTPSAddr == "" {

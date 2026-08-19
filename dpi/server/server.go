@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
@@ -34,24 +36,28 @@ type Config struct {
 	CertDir       string
 	Protocol      string
 	LogTag        string
-	Target        string // if set, every CONNECT/UDP is this address
+	Target        string
 	SkipUDP       bool
+	ServeDir      string
+	Backend       string
 }
 
 // Server is the proxy server.
 type Server struct {
-	cfg        Config
-	log        ptlog.PTLog
-	encryptor  *common.Encryptor
-	listeners  []net.Listener
-	handler    *tunnelHandler
-	mux        *http.ServeMux
-	clientLock sync.RWMutex
-	clients    map[uint32]*clientConn
-	sessLock   sync.RWMutex
-	sessions   map[string]*muxSession
-	nextConnID atomic.Uint32
-	stopCh     chan struct{}
+	cfg          Config
+	log          ptlog.PTLog
+	encryptor    *common.Encryptor
+	listeners    []net.Listener
+	handler      *tunnelHandler
+	mux          *http.ServeMux
+	clientLock   sync.RWMutex
+	clients      map[uint32]*clientConn
+	sessLock     sync.RWMutex
+	sessions     map[string]*muxSession
+	nextConnID   atomic.Uint32
+	stopCh       chan struct{}
+	fileServer   http.Handler
+	reverseProxy *httputil.ReverseProxy
 }
 
 // NewServer creates a new server.
@@ -71,7 +77,17 @@ func NewServer(cfg Config) (*Server, error) {
 	s.handler = newTunnelHandler(s)
 	s.mux = http.NewServeMux()
 
-	// Tunnel endpoints - use random-looking paths
+	if cfg.Backend != "" {
+		u, err := url.Parse(cfg.Backend)
+		if err != nil {
+			return nil, fmt.Errorf("backend url: %w", err)
+		}
+		s.reverseProxy = httputil.NewSingleHostReverseProxy(u)
+	}
+	if cfg.ServeDir != "" {
+		s.fileServer = http.FileServer(http.Dir(cfg.ServeDir))
+	}
+
 	s.mux.HandleFunc("/.well-known/cdn-cache/", s.handler.handleTunnel)
 	s.mux.HandleFunc("/api/v2/upload", s.handler.handleTunnel)
 	s.mux.HandleFunc("/api/v2/stream", s.handler.handleStreamUpload)
@@ -85,6 +101,14 @@ func NewServer(cfg Config) (*Server, error) {
 func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.RedirectURL != "" {
 		http.Redirect(w, r, s.cfg.RedirectURL, http.StatusFound)
+		return
+	}
+	if s.reverseProxy != nil {
+		s.reverseProxy.ServeHTTP(w, r)
+		return
+	}
+	if s.fileServer != nil {
+		s.fileServer.ServeHTTP(w, r)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html")

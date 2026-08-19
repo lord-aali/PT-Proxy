@@ -29,8 +29,8 @@
       "listen": "0.0.0.0:8080",
       "tag": "sf-public",
       "target": "exit",
-      "tls-cert": "",
-      "tls-key": ""
+      "tls-cert": "/etc/ssl/certs/server.crt",
+      "tls-key": "/etc/ssl/private/server.key"
     }
   ],
   "client": [
@@ -38,9 +38,9 @@
       "type": "snowflake",
       "listen": "127.0.0.1:1080",
       "address": "ws://203.0.113.10:8080/",
-      "sni": "",
-      "front-host": "",
-      "proxy": "",
+      "sni": "proxy.example.com",
+      "front-host": "allowed.example.com",
+      "proxy": "socks5://127.0.0.1:9050",
       "insecure": false,
       "tag": "sf-fwd"
     }

@@ -28,17 +28,19 @@
       "type": "dpi",
       "tag": "dpi-public",
       "target": "exit",
-      "http": "",
+      "http": "0.0.0.0:80",
       "https": "0.0.0.0:443",
       "enc-key": "change-me-shared-key",
       "protocol": "auto",
       "self-signed": true,
-      "tls-cert": "",
-      "tls-key": "",
-      "acme-email": "",
-      "acme-domain": "",
-      "cert-dir": "",
-      "redirect": "https://example.com/"
+      "tls-cert": "/etc/ssl/certs/server.crt",
+      "tls-key": "/etc/ssl/private/server.key",
+      "acme-email": "admin@example.com",
+      "acme-domain": "proxy.example.com",
+      "cert-dir": "/var/lib/ptproxy/certs",
+      "redirect": "https://example.com/",
+      "serve-dir": "/var/www/html",
+      "backend": "http://127.0.0.1:8080"
     }
   ],
   "client": [
@@ -48,8 +50,8 @@
       "address": "https://203.0.113.10:443",
       "enc-key": "change-me-shared-key",
       "protocol": "auto",
-      "sni": "",
-      "front-host": "",
+      "sni": "proxy.example.com",
+      "front-host": "allowed.example.com",
       "insecure": true,
       "redirect-follow": true,
       "uplink": "post-async",
@@ -103,7 +105,9 @@
         <tr><td><code>tls-cert</code> / <code>tls-key</code></td><td>Conditional</td><td>empty</td><td>Required for HTTPS when not using <code>self-signed</code> and not using ACME.</td></tr>
         <tr><td><code>acme-email</code> / <code>acme-domain</code></td><td>Conditional</td><td>empty</td><td>Let’s Encrypt path for HTTPS instead of files or self-signed.</td></tr>
         <tr><td><code>cert-dir</code></td><td>Optional</td><td>empty</td><td>Where ACME/self-signed material is stored when used.</td></tr>
-        <tr><td><code>redirect</code></td><td>Optional</td><td>empty</td><td>URL for ordinary browser GET/HEAD that is not tunnel traffic.</td></tr>
+        <tr><td><code>redirect</code></td><td>Optional</td><td>empty</td><td>URL to redirect non-tunnel requests to. Takes priority over <code>backend</code> and <code>serve-dir</code>.</td></tr>
+        <tr><td><code>serve-dir</code></td><td>Optional</td><td>empty</td><td>Local filesystem path to serve as a static site. <code>index.html</code> is the default document; directory listing is shown when absent.</td></tr>
+        <tr><td><code>backend</code></td><td>Optional</td><td>empty</td><td>URL of an existing HTTP server to reverse-proxy non-tunnel requests to (e.g. <code>http://127.0.0.1:80</code>). Takes priority over <code>serve-dir</code>. Supports Apache <code>.htaccess</code>, PHP, CGI via the upstream server.</td></tr>
       </table>
       <p class="muted">HTTPS requires exactly one TLS path: <code>self-signed</code>, or <code>tls-cert</code>+<code>tls-key</code>, or <code>acme-email</code>+<code>acme-domain</code>.</p>
 

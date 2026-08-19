@@ -353,14 +353,16 @@
         "enc-key": "change-me-shared-key",
         protocol: "auto",
         http: "",
-        https: type === "dpi" ? "0.0.0.0:443" : "",
+        https: "",
         "tls-cert": "",
         "tls-key": "",
         "acme-email": "",
         "acme-domain": "",
-        "self-signed": type === "dpi",
+        "self-signed": false,
         redirect: "",
         "cert-dir": "",
+        "serve-dir": "",
+        backend: "",
         user: type === "ftp" ? "tunnel" : "",
         pass: type === "ftp" ? "secret" : "",
         "pasv-ip": "",
@@ -496,13 +498,11 @@
       if (type === "socks") {
         fields.push(fieldText("user", entry.user, soft("user")), fieldText("pass", entry.pass, soft("pass")));
       }
-      if (isObfs(type)) {
+      if (type === "obfs4") {
         fields.push(
-          fieldText("cert", entry.cert, soft("cert"), true, type === "obfs4" ? "auto-generated if empty" : ""),
+          fieldText("cert", entry.cert, soft("cert"), true, "auto-generated if empty"),
+          fieldText("private-key", entry["private-key"], soft("private-key"), true),
         );
-        if (type === "obfs4") {
-          fields.push(fieldText("private-key", entry["private-key"], soft("private-key"), true));
-        }
       }
       if (type === "dpi") {
         fields.push(
@@ -517,6 +517,8 @@
           fieldText("acme-domain", entry["acme-domain"], soft("acme-domain")),
           fieldText("cert-dir", entry["cert-dir"], soft("cert-dir")),
           fieldText("redirect", entry.redirect, soft("redirect"), true, "https://example.com"),
+          fieldText("serve-dir", entry["serve-dir"], soft("serve-dir"), true, "/var/www/html"),
+          fieldText("backend", entry["backend"], soft("backend"), true, "http://127.0.0.1:80"),
         );
       }
       if (type === "snowflake") {
@@ -554,9 +556,9 @@
         fieldText("reverse-tag", entry["reverse-tag"], soft("reverse-tag"), false, "service tag in this file's server list"),
       ];
 
-      if (isObfs(type)) {
+      if (type === "obfs4") {
         fields.push(
-          fieldText("cert", entry.cert, soft("cert"), true, type === "obfs4" ? "server cert" : ""),
+          fieldText("cert", entry.cert, soft("cert"), true, "server cert"),
         );
       }
       if (type === "dpi") {
@@ -613,9 +615,9 @@
         set("user", entry.user);
         set("pass", entry.pass);
       }
-      if (isObfs(type)) {
+      if (type === "obfs4") {
         set("cert", entry.cert);
-        if (type === "obfs4") set("private-key", entry["private-key"]);
+        set("private-key", entry["private-key"]);
       }
       if (type === "dpi") {
         set("enc-key", entry["enc-key"]);
@@ -629,6 +631,8 @@
         set("acme-domain", entry["acme-domain"]);
         set("cert-dir", entry["cert-dir"]);
         set("redirect", entry.redirect);
+        set("serve-dir", entry["serve-dir"]);
+        set("backend", entry["backend"]);
       }
       if (type === "snowflake") {
         set("listen", entry.listen);
@@ -666,7 +670,7 @@
       set("address", entry.address);
       set("reverse-tag", entry["reverse-tag"]);
 
-      if (isObfs(type)) {
+      if (type === "obfs4") {
         set("cert", entry.cert);
       }
       if (type === "dpi") {

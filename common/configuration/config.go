@@ -55,6 +55,9 @@ type JsonServerConfigImpl struct {
 	UploadPorts   string `json:"upload-ports,omitempty"`
 	DownloadPorts string `json:"download-ports,omitempty"`
 	TLS           bool   `json:"tls,omitempty"`
+
+	ServeDir string `json:"serve-dir,omitempty"`
+	Backend  string `json:"backend,omitempty"`
 }
 
 type JsonClientConfigImpl struct {
