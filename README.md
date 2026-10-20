@@ -2,7 +2,7 @@
 
 PT Proxy is a single binary that runs censorship-circumvention tunnels from one JSON file. You can run a public bridge, a client, or both in the same process.
 
-You compose **services** (`socks`, `http`, `external`) and **tunnels** (obfs, DPI, Snowflake, FTP). Tags wire them for forward or reverse pipes.
+You compose **services** (`socks`, `http`, `external`) and **tunnels** (obfs, DPI, Snowflake, FTP, TCP/UDP, GRE, WebRTC). Tags wire them for forward or reverse pipes.
 
 `If this project helps you, consider leaving a star. ⭐`
 
@@ -163,7 +163,7 @@ Run `socks` in the client `server` list, and a reverse client whose `reverse-tag
 | `listen` | external | Required dial address of the real backend. No default. |
 | `user` / `pass` | socks | Optional SOCKS auth. Omitted = no auth. |
 
-Client tunnel `listen` defaults to `127.0.0.1:1080`. Server obfs `listen` defaults to `0.0.0.0:3334`, Snowflake `0.0.0.0:8080`, FTP `0.0.0.0:21`, DPI HTTPS `0.0.0.0:443`.
+Client tunnel `listen` defaults to `127.0.0.1:1080`. Server obfs `listen` defaults to `0.0.0.0:3334`, Snowflake `0.0.0.0:8080`, FTP `0.0.0.0:21`, DPI HTTPS `0.0.0.0:443`, TCP carrier `0.0.0.0:4443`, UDP carrier `0.0.0.0:4444`.
 
 Logs look like `[obfs4-3334]` so you can tell entries apart.
 
@@ -190,9 +190,31 @@ WebSocket relay with KCP/smux. **Server:** `listen` (ws/wss), optional TLS, opti
 
 FTP/FTPS façade with persistent data channels. **Server:** `listen`, `user`, `pass`, `enc-key`, `pasv-ip`, port ranges, optional TLS, optional `target`. **Client:** `address` (FTP host:port), `listen`, credentials, channel counts, optional PASV overrides, `decoy`.
 
+### TCP / UDP carrier
+
+Minimal encrypted outer link (no camouflage). Shared inner protocol in `carrier/core`. **Server:** `type` `tcp` or `udp`, `listen`, `enc-key`, optional `target`. **Client:** matching `type`, `listen`, `address`, `enc-key`, optional `reverse-tag`. See [`doc/carrier.html`](doc/carrier.html).
+
+### GRE carrier
+
+IP protocol 47 with a standard keyed GRE header (key + sequence, protocol type IPv4). Inner frames are the same `carrier/core` session. **Server:** `listen` is a local IPv4 (default `0.0.0.0`), `enc-key`, optional `gre-key` (default `1`), `target`, optional `pad-max` / `jitter-ms`. **Client:** `address` is the peer IPv4, `listen`, matching keys, optional `reverse-tag`. If raw protocol 47 is denied, both sides use GRE-in-UDP port `4754`. See [`doc/gre.html`](doc/gre.html).
+
+* Note: If you are a root/admin user, but you wanted to use UDP ```GRE-in-UDP``` instead of Protocol 47, just add a port to ```listen``` in server and ```address``` in client. The service will locks on UDP.
+
+### WebRTC carrier
+
+Real ICE/DTLS/SCTP data channel (Pion). HTTP `POST /webrtc` exchanges the SDP offer and answer. Other requests on that listener use the same cover as DPI: `redirect`, then `backend`, then `serve-dir`, otherwise a short HTML page. A domain `backend` is fetched with that Host and TLS server name, and the incoming path is kept (`/blog` stays `/blog`). Inner frames use `carrier/core`. **Server:** `listen` (default `0.0.0.0:8443`), `enc-key`, optional `target`, `stun`, `public-ip`, `redirect`, `backend`, `serve-dir`. **Client:** `address` (`http://host:8443/webrtc`), `listen`, `enc-key`, optional `stun` and `reverse-tag`. No raw socket. See [`doc/webrtc.html`](doc/webrtc.html).
+
+### MoQ carrier
+
+Real QUIC connection with Media over QUIC Transport draft 16 (`ALPN moqt-16`). Namespace `ptproxy`, tracks `up` and `down`. Each object is one `carrier/core` frame. **Server:** `listen` (default `0.0.0.0:4433`), `enc-key`, optional `target`. **Client:** `address` (`host:port`), `listen`, `enc-key`, optional `reverse-tag`. The certificate is self-signed and not verified; `enc-key` authenticates the session. No root requirement. See [`doc/moq.html`](doc/moq.html).
+
+### Custom WG carrier
+
+UDP datagrams sealed with ChaCha20-Poly1305. The layout is not WireGuard: no handshake initiation, no mac1/mac2, and no transport type-4 header, so it does not interoperate with WireGuard. Inner frames are `carrier/core`. **Server:** `listen` (default `0.0.0.0:4446`), `enc-key`, optional `target`. **Client:** `address` (`host:port`), `listen`, `enc-key`, optional `reverse-tag`. No root requirement. See [`doc/cwg.html`](doc/cwg.html).
+
 ## Build
 
-Requires Go 1.24+.
+Requires Go 1.25+.
 
 ```bash
 go build -o ptproxy ./main/

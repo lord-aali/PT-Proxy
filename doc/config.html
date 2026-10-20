@@ -20,7 +20,7 @@
       <h2>Fields</h2>
       <table>
         <tr><th>Field</th><th>On</th><th>Meaning</th></tr>
-        <tr><td><code>type</code></td><td>every block</td><td>socks, http, external, obfs2/3/4, dpi, snowflake, ftp</td></tr>
+        <tr><td><code>type</code></td><td>every block</td><td>socks, http, external, obfs2/3/4, dpi, snowflake, ftp, tcp, udp, gre, webrtc, moq, cwg</td></tr>
         <tr><td><code>tag</code></td><td>every block</td><td>Name used by <code>target</code> and <code>reverse-tag</code>. If omitted: <code>type-port</code> after bind. Port <code>0</code> uses the assigned port. DPI uses the HTTPS port if set, else HTTP.</td></tr>
         <tr><td><code>listen</code></td><td>most blocks</td><td>Bind address. For <strong>external</strong>, the address to dial.</td></tr>
         <tr><td><code>target</code></td><td>tunnel server</td><td>Tag for forward streams. Reverse binds are always allowed on the same listener. Empty: reverse-only hub.</td></tr>

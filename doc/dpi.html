@@ -107,7 +107,7 @@
         <tr><td><code>cert-dir</code></td><td>Optional</td><td>empty</td><td>Where ACME/self-signed material is stored when used.</td></tr>
         <tr><td><code>redirect</code></td><td>Optional</td><td>empty</td><td>URL to redirect non-tunnel requests to. Takes priority over <code>backend</code> and <code>serve-dir</code>.</td></tr>
         <tr><td><code>serve-dir</code></td><td>Optional</td><td>empty</td><td>Local filesystem path to serve as a static site. <code>index.html</code> is the default document; directory listing is shown when absent.</td></tr>
-        <tr><td><code>backend</code></td><td>Optional</td><td>empty</td><td>URL of an existing HTTP server to reverse-proxy non-tunnel requests to (e.g. <code>http://127.0.0.1:80</code>). Takes priority over <code>serve-dir</code>. Supports Apache <code>.htaccess</code>, PHP, CGI via the upstream server.</td></tr>
+        <tr><td><code>backend</code></td><td>Optional</td><td>empty</td><td>URL to reverse-proxy every non-tunnel path to. The request path is kept, so <code>/blog</code> fetches <code>https://example.com/blog</code>. A domain name is sent as the Host header and, for HTTPS, as the TLS server name. An IP backend keeps the incoming Host header. Takes priority over <code>serve-dir</code>.</td></tr>
       </table>
       <p class="muted">HTTPS requires exactly one TLS path: <code>self-signed</code>, or <code>tls-cert</code>+<code>tls-key</code>, or <code>acme-email</code>+<code>acme-domain</code>.</p>
 

@@ -106,15 +106,21 @@ func NewTransport(cfg TransportConfig) (*Transport, error) {
 	}
 	tr.connIDGen = 1
 
+	tlsCfg := cfg.TLSConfig
+	if tlsCfg == nil {
+		tlsCfg = &tls.Config{}
+	} else {
+		tlsCfg = tlsCfg.Clone()
+	}
 	transport := &http.Transport{
 		MaxIdleConns:        256,
 		IdleConnTimeout:     120 * time.Second,
 		DisableCompression:  true,
 		MaxIdleConnsPerHost: 128,
 		ForceAttemptHTTP2:   proto != "h1",
-		TLSClientConfig:     cfg.TLSConfig,
+		TLSClientConfig:     tlsCfg,
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			if strings.Contains(addr, u.Hostname()) {
+			if strings.Contains(addr, u.Hostname()) || (tr.dialIP != "" && strings.Contains(addr, tr.dialIP)) {
 				_, port, err := net.SplitHostPort(addr)
 				if err != nil {
 					if u.Scheme == "https" {

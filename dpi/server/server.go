@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
@@ -16,6 +14,7 @@ import (
 	"time"
 
 	"github.com/lord-aali/PT-Proxy/common/ptlog"
+	"github.com/lord-aali/PT-Proxy/common/revproxy"
 	"github.com/lord-aali/PT-Proxy/dpi/common"
 
 	"golang.org/x/crypto/acme"
@@ -57,7 +56,7 @@ type Server struct {
 	nextConnID   atomic.Uint32
 	stopCh       chan struct{}
 	fileServer   http.Handler
-	reverseProxy *httputil.ReverseProxy
+	reverseProxy http.Handler
 }
 
 // NewServer creates a new server.
@@ -78,11 +77,10 @@ func NewServer(cfg Config) (*Server, error) {
 	s.mux = http.NewServeMux()
 
 	if cfg.Backend != "" {
-		u, err := url.Parse(cfg.Backend)
+		s.reverseProxy, err = revproxy.New(cfg.Backend)
 		if err != nil {
-			return nil, fmt.Errorf("backend url: %w", err)
+			return nil, err
 		}
-		s.reverseProxy = httputil.NewSingleHostReverseProxy(u)
 	}
 	if cfg.ServeDir != "" {
 		s.fileServer = http.FileServer(http.Dir(cfg.ServeDir))

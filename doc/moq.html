@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MoQ carrier — PT Proxy wiki</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="layout">
+    <nav id="nav"></nav>
+    <main>
+      <h1>MoQ carrier</h1>
+      <p>Outer transport is Media over QUIC Transport draft 16 on a normal QUIC connection. The ALPN is <code>moqt-16</code>. After SETUP, each side announces the <code>ptproxy</code> namespace and subscribes to one track. Track <code>up</code> carries client-to-server frames and track <code>down</code> carries server-to-client frames. Each object payload is one encrypted <code>carrier/core</code> frame. Forward and reverse match the other carriers.</p>
+
+      <h2>Example JSON (forward)</h2>
+<pre><code>{
+  "server": [
+    { "type": "socks", "listen": "127.0.0.1:0", "tag": "exit" },
+    {
+      "type": "moq",
+      "listen": "0.0.0.0:4433",
+      "tag": "moq-public",
+      "target": "exit",
+      "enc-key": "change-me-please"
+    }
+  ],
+  "client": [
+    {
+      "type": "moq",
+      "listen": "127.0.0.1:1080",
+      "address": "203.0.113.10:4433",
+      "enc-key": "change-me-please",
+      "tag": "moq-fwd"
+    }
+  ]
+}</code></pre>
+
+      <h2>Server fields</h2>
+      <ul>
+        <li><code>listen</code> — UDP bind for QUIC. Default <code>0.0.0.0:4433</code>.</li>
+        <li><code>target</code> — service tag for forward flows</li>
+        <li><code>enc-key</code> — encrypts frames inside MoQ objects</li>
+        <li><code>pad-max</code> / <code>jitter-ms</code> — optional shaping</li>
+      </ul>
+
+      <h2>Client fields</h2>
+      <ul>
+        <li><code>address</code> — server <code>host:port</code>. <code>moq://</code> is accepted and stripped.</li>
+        <li><code>listen</code> — local TCP+UDP bind (forward) or remote publish address (reverse)</li>
+        <li><code>enc-key</code> — must match the server</li>
+        <li><code>reverse-tag</code> — optional</li>
+      </ul>
+
+      <h2>Notes</h2>
+      <ul>
+        <li>The listener uses a fresh self-signed certificate. The client does not check that certificate. <code>enc-key</code> is what authenticates the tunnel.</li>
+        <li>Allow UDP on the listen port. There is no TCP signaling port and no root requirement.</li>
+        <li>QUIC keepalive is 15 seconds. An idle session stays up for about two minutes without traffic.</li>
+      </ul>
+    </main>
+  </div>
+  <script src="nav.js"></script>
+</body>
+</html>

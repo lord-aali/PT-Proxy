@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GRE carrier — PT Proxy wiki</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="layout">
+    <nav id="nav"></nav>
+    <main>
+      <h1>GRE carrier</h1>
+      <p>Outer packets are GRE (IP protocol 47) with a normal keyed header: key and sequence number, protocol type IPv4 (<code>0x0800</code>). The GRE payload is one encrypted <code>carrier/core</code> frame. Forward and reverse match the TCP/UDP carrier.</p>
+
+      <h2>Example JSON (forward)</h2>
+<pre><code>{
+  "server": [
+    { "type": "socks", "listen": "127.0.0.1:0", "tag": "exit" },
+    {
+      "type": "gre",
+      "listen": "0.0.0.0",
+      "tag": "gre-public",
+      "target": "exit",
+      "enc-key": "change-me-please",
+      "gre-key": "1"
+    }
+  ],
+  "client": [
+    {
+      "type": "gre",
+      "listen": "127.0.0.1:1080",
+      "address": "203.0.113.10",
+      "enc-key": "change-me-please",
+      "gre-key": "1",
+      "tag": "gre-fwd"
+    }
+  ]
+}</code></pre>
+
+      <h2>Server fields</h2>
+      <ul>
+        <li><code>listen</code> — local IPv4 to bind the raw socket. Default <code>0.0.0.0</code>. Not a TCP port.</li>
+        <li><code>target</code> — service tag for forward flows</li>
+        <li><code>enc-key</code> — AES-GCM secret</li>
+        <li><code>gre-key</code> — GRE key field (decimal). Default <code>1</code>. Must match the client.</li>
+        <li><code>pad-max</code> / <code>jitter-ms</code> — optional shaping. <code>0</code> disables them.</li>
+      </ul>
+
+      <h2>Client fields</h2>
+      <ul>
+        <li><code>address</code> — peer IPv4 (host or <code>host:port</code>; the port is ignored)</li>
+        <li><code>listen</code> — local TCP+UDP bind (forward) or remote publish address (reverse)</li>
+        <li><code>enc-key</code>, <code>gre-key</code> — must match the server</li>
+        <li><code>reverse-tag</code> — optional</li>
+      </ul>
+
+      <h2>Notes</h2>
+      <ul>
+        <li>Prefers a raw IPv4 socket (protocol 47). If the OS denies that (typical on Windows without extra privileges), both sides switch to GRE-in-UDP on port <code>4754</code>: a normal UDP datagram whose payload is still a GRE header plus one encrypted frame. Set <code>listen</code> or <code>address</code> to <code>host:port</code> to force that UDP port.</li>
+        <li>If you are a root/admin user, but you wanted to use UDP GRE-in-UDP instead of Protocol 47, just add a port to listen in server and address in client. The service will locks on UDP.</li>
+        <li>Each GRE datagram is one frame. Large flows fragment like any GRE tunnel.</li>
+        <li>Packets with a different <code>gre-key</code> are dropped.</li>
+      </ul>
+    </main>
+  </div>
+  <script src="nav.js"></script>
+</body>
+</html>

@@ -10,7 +10,12 @@
     ["obfs2 / obfs3 / obfs4", "obfs.html"],
     ["DPI", "dpi.html"],
     ["Snowflake", "snowflake.html"],
-    ["FTP", "ftp.html"]
+    ["FTP", "ftp.html"],
+    ["TCP / UDP carrier", "carrier.html"],
+    ["GRE", "gre.html"],
+    ["WebRTC", "webrtc.html"],
+    ["MoQ", "moq.html"],
+    ["Custom WG", "cwg.html"]
   ];
   var file = (location.pathname.split("/").pop() || "index.html").toLowerCase();
   var html = '<h1>PT Proxy wiki</h1><div class="sub">Instructions and implementation</div>';

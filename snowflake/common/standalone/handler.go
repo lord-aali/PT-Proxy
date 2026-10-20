@@ -19,14 +19,12 @@ import (
 	"github.com/xtaci/smux"
 )
 
-// Upgrader for WebSocket connections.
 var Upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
 const clientMapTimeout = 1 * time.Minute
 
-// Server runs the WebSocket turbotunnel server and KCP/smux accept loop.
 type Server struct {
 	pconn        *turbotunnel.QueuePacketConn
 	smuxSessions map[turbotunnel.ClientID]*smux.Session

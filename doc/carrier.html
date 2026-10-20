@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TCP / UDP carrier — PT Proxy wiki</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="layout">
+    <nav id="nav"></nav>
+    <main>
+      <h1>TCP / UDP carrier</h1>
+      <p>Minimal encrypted tunnels. Outer link is raw TCP or UDP. Inner frames are length-prefixed (TCP) or one datagram per frame (UDP), sealed with AES-256-GCM from <code>SHA256(enc-key)</code>. Shared session logic lives in <code>carrier/core</code> (OpenTCP/OpenUDP, Data, Close, DNS, reverse).</p>
+
+      <h2>Example JSON (forward)</h2>
+<pre><code>{
+  "server": [
+    { "type": "socks", "listen": "127.0.0.1:0", "tag": "exit" },
+    {
+      "type": "tcp",
+      "listen": "0.0.0.0:4443",
+      "tag": "tcp-public",
+      "target": "exit",
+      "enc-key": "change-me-please"
+    }
+  ],
+  "client": [
+    {
+      "type": "tcp",
+      "listen": "127.0.0.1:1080",
+      "address": "203.0.113.10:4443",
+      "enc-key": "change-me-please",
+      "tag": "tcp-fwd"
+    }
+  ]
+}</code></pre>
+
+      <p>UDP outer (same fields, <code>type: "udp"</code>):</p>
+<pre><code>{
+  "server": [
+    { "type": "socks", "listen": "127.0.0.1:0", "tag": "exit" },
+    {
+      "type": "udp",
+      "listen": "0.0.0.0:4444",
+      "target": "exit",
+      "enc-key": "change-me-please"
+    }
+  ],
+  "client": [
+    {
+      "type": "udp",
+      "listen": "127.0.0.1:1080",
+      "address": "203.0.113.10:4444",
+      "enc-key": "change-me-please"
+    }
+  ]
+}</code></pre>
+
+      <h2>Server fields</h2>
+      <ul>
+        <li><code>type</code> — <code>tcp</code> or <code>udp</code></li>
+        <li><code>listen</code> — outer bind</li>
+        <li><code>target</code> — service tag to pipe (socks/http/external)</li>
+        <li><code>enc-key</code> — shared secret</li>
+        <li><code>tag</code> — optional</li>
+      </ul>
+
+      <h2>Client fields</h2>
+      <ul>
+        <li><code>type</code> — must match server (<code>tcp</code> / <code>udp</code>)</li>
+        <li><code>listen</code> — local TCP+UDP bind (forward; apps speak SOCKS to the remote <code>target</code>) or remote publish address (reverse)</li>
+        <li><code>address</code> — server host:port</li>
+        <li><code>enc-key</code> — same secret</li>
+        <li><code>reverse-tag</code> — optional; local service to expose on the server</li>
+      </ul>
+
+      <h2>Notes</h2>
+      <ul>
+        <li>No padding or jitter by default (hooks exist for later carriers).</li>
+        <li>Forward mode matches obfs: raw local listen; SOCKS is answered by the server <code>target</code> service.</li>
+        <li>Handshake: encrypted Hello / HelloOK bound to <code>enc-key</code>.</li>
+      </ul>
+    </main>
+  </div>
+  <script src="nav.js"></script>
+</body>
+</html>

@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lord-aali/PT-Proxy/carrier/adapter"
+	"github.com/lord-aali/PT-Proxy/carrier/core"
 	"github.com/lord-aali/PT-Proxy/common/dualbind"
 	"github.com/lord-aali/PT-Proxy/dpi/common"
 )
@@ -144,6 +146,15 @@ func (h *tunnelHandler) handleStreamUpload(w http.ResponseWriter, r *http.Reques
 		f.Flush()
 	}
 
+	dpiSess := adapter.NewDPIServerSession(core.ServerConfig{
+		Target:  h.server.cfg.Target,
+		SkipUDP: h.server.cfg.SkipUDP,
+	}, h.server.encryptor, func(plain []byte) error {
+		sess := h.server.getOrCreateSession(sessionID)
+		return sess.writeFrame(h.server.encryptor, plain)
+	})
+	defer dpiSess.Close()
+
 	for {
 		enc, err := common.ReadLengthPrefixed(r.Body)
 		if err != nil {
@@ -157,7 +168,7 @@ func (h *tunnelHandler) handleStreamUpload(w http.ResponseWriter, r *http.Reques
 			h.server.log.Error("stream decrypt:", err)
 			continue
 		}
-		h.dispatchPlain(nil, decrypted, sessionID, false)
+		dpiSess.HandlePlain(decrypted)
 	}
 }
 

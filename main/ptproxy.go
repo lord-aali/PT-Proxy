@@ -91,6 +91,16 @@ func main() {
 			launchSnowflakeServer(c, tag, targetAddr, skipUDP)
 		case "ftp":
 			launchFtpServer(c, tag, targetAddr, skipUDP)
+		case "tcp", "udp":
+			launchCarrierServer(c, tag, targetAddr, skipUDP)
+		case "gre":
+			launchGREServer(c, tag, targetAddr, skipUDP)
+		case "webrtc":
+			launchWebRTCServer(c, tag, targetAddr, skipUDP)
+		case "moq":
+			launchMoQServer(c, tag, targetAddr, skipUDP)
+		case "cwg":
+			launchCWGServer(c, tag, targetAddr, skipUDP)
 		default:
 			obfsServer := ObfsServer.Server{LogTag: tag, Target: targetAddr, SkipUDP: skipUDP}
 			if isLaunched, ls := obfsServer.Setup(c); isLaunched {
@@ -123,6 +133,16 @@ func main() {
 			launchSnowflakeClient(c, tag, reverseAddr, skipUDP)
 		case "ftp":
 			launchFtpClient(c, tag, reverseAddr, skipUDP)
+		case "tcp", "udp":
+			launchCarrierClient(c, tag, reverseAddr, skipUDP)
+		case "gre":
+			launchGREClient(c, tag, reverseAddr, skipUDP)
+		case "webrtc":
+			launchWebRTCClient(c, tag, reverseAddr, skipUDP)
+		case "moq":
+			launchMoQClient(c, tag, reverseAddr, skipUDP)
+		case "cwg":
+			launchCWGClient(c, tag, reverseAddr, skipUDP)
 		default:
 			obfsClient := ObfsClient.Client{LogTag: tag, ReverseAddr: reverseAddr, SkipUDP: skipUDP}
 			if isLaunched, ls := obfsClient.Setup(c); isLaunched {

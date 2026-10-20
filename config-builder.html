@@ -323,8 +323,8 @@
   <div class="toast" id="toast"></div>
 
   <script>
-    const SERVER_TYPES = ["socks", "http", "external", "obfs4", "obfs3", "obfs2", "dpi", "snowflake", "ftp"];
-    const CLIENT_TYPES = ["obfs4", "obfs3", "obfs2", "dpi", "snowflake", "ftp"];
+    const SERVER_TYPES = ["socks", "http", "external", "obfs4", "obfs3", "obfs2", "dpi", "snowflake", "ftp", "tcp", "udp", "gre", "webrtc", "moq", "cwg"];
+    const CLIENT_TYPES = ["obfs4", "obfs3", "obfs2", "dpi", "snowflake", "ftp", "tcp", "udp", "gre", "webrtc", "moq", "cwg"];
     const isObfs = (t) => t === "obfs4" || t === "obfs3" || t === "obfs2";
     const isService = (t) => t === "socks" || t === "http" || t === "external";
 
@@ -339,6 +339,12 @@
       if (type === "external") return "";
       if (type === "snowflake") return "0.0.0.0:8080";
       if (type === "ftp") return "0.0.0.0:21";
+      if (type === "tcp") return "0.0.0.0:4443";
+      if (type === "udp") return "0.0.0.0:4444";
+      if (type === "gre") return "0.0.0.0";
+      if (type === "webrtc") return "0.0.0.0:8443";
+      if (type === "moq") return "0.0.0.0:4433";
+      if (type === "cwg") return "0.0.0.0:4446";
       return "0.0.0.0:3334";
     }
 
@@ -369,6 +375,9 @@
         "upload-ports": "8080",
         "download-ports": "8081",
         tls: false,
+        "gre-key": "1",
+        "pad-max": 0,
+        "jitter-ms": 0,
       };
     }
 
@@ -378,7 +387,7 @@
         listen: "127.0.0.1:1080",
         tag: "",
         "reverse-tag": "",
-        address: type === "dpi" ? "https://127.0.0.1:443" : type === "snowflake" ? "ws://127.0.0.1:8080/" : type === "ftp" ? "127.0.0.1:21" : "127.0.0.1:3334",
+        address: type === "dpi" ? "https://127.0.0.1:443" : type === "snowflake" ? "ws://127.0.0.1:8080/" : type === "ftp" ? "127.0.0.1:21" : type === "udp" ? "127.0.0.1:4444" : type === "tcp" ? "127.0.0.1:4443" : type === "gre" ? "127.0.0.1" : type === "webrtc" ? "http://127.0.0.1:8443/webrtc" : type === "moq" ? "127.0.0.1:4433" : type === "cwg" ? "127.0.0.1:4446" : "127.0.0.1:3334",
         cert: "",
         "enc-key": "change-me-shared-key",
         protocol: "auto",
@@ -403,6 +412,9 @@
         "socks-user": "",
         "socks-pass": "",
         tls: false,
+        "gre-key": "1",
+        "pad-max": 0,
+        "jitter-ms": 0,
       };
     }
 
@@ -525,6 +537,7 @@
         fields.push(
           fieldText("tls-cert", entry["tls-cert"], soft("tls-cert")),
           fieldText("tls-key", entry["tls-key"], soft("tls-key")),
+          fieldText("enc-key", entry["enc-key"], soft("enc-key")),
         );
       }
       if (type === "ftp") {
@@ -538,6 +551,43 @@
           fieldCheck("tls", !!entry.tls, soft("tls")),
           fieldText("tls-cert", entry["tls-cert"], soft("tls-cert")),
           fieldText("tls-key", entry["tls-key"], soft("tls-key")),
+        );
+      }
+      if (type === "tcp" || type === "udp") {
+        fields.push(fieldText("enc-key", entry["enc-key"], soft("enc-key")));
+      }
+      if (type === "gre") {
+        fields.push(
+          fieldText("enc-key", entry["enc-key"], soft("enc-key")),
+          fieldText("gre-key", entry["gre-key"], soft("gre-key"), false, "1"),
+          fieldNumber("pad-max", entry["pad-max"], soft("pad-max")),
+          fieldNumber("jitter-ms", entry["jitter-ms"], soft("jitter-ms")),
+        );
+      }
+      if (type === "webrtc") {
+        fields.push(
+          fieldText("enc-key", entry["enc-key"], soft("enc-key")),
+          fieldText("stun", entry.stun, soft("stun"), false, "stun:stun.l.google.com:19302"),
+          fieldText("public-ip", entry["public-ip"], soft("public-ip"), false, "203.0.113.10"),
+          fieldText("redirect", entry.redirect, soft("redirect"), true, "https://example.com"),
+          fieldText("serve-dir", entry["serve-dir"], soft("serve-dir"), true, "/var/www/html"),
+          fieldText("backend", entry.backend, soft("backend"), true, "http://127.0.0.1:80"),
+          fieldNumber("pad-max", entry["pad-max"], soft("pad-max")),
+          fieldNumber("jitter-ms", entry["jitter-ms"], soft("jitter-ms")),
+        );
+      }
+      if (type === "moq") {
+        fields.push(
+          fieldText("enc-key", entry["enc-key"], soft("enc-key")),
+          fieldNumber("pad-max", entry["pad-max"], soft("pad-max")),
+          fieldNumber("jitter-ms", entry["jitter-ms"], soft("jitter-ms")),
+        );
+      }
+      if (type === "cwg") {
+        fields.push(
+          fieldText("enc-key", entry["enc-key"], soft("enc-key")),
+          fieldNumber("pad-max", entry["pad-max"], soft("pad-max")),
+          fieldNumber("jitter-ms", entry["jitter-ms"], soft("jitter-ms")),
         );
       }
       return el("div", { className: "grid" }, fields);
@@ -579,6 +629,7 @@
           fieldText("front-host", entry["front-host"], soft("front-host")),
           fieldText("proxy", entry.proxy, soft("proxy"), false, "socks5://127.0.0.1:9050"),
           fieldCheck("insecure", !!entry.insecure, soft("insecure")),
+          fieldText("enc-key", entry["enc-key"], soft("enc-key")),
         );
       }
       if (type === "ftp") {
@@ -593,6 +644,39 @@
           fieldCheck("decoy", !!entry.decoy, soft("decoy")),
           fieldCheck("tls", !!entry.tls, soft("tls")),
           fieldCheck("verbose", !!entry.verbose, soft("verbose")),
+        );
+      }
+      if (type === "tcp" || type === "udp") {
+        fields.push(fieldText("enc-key", entry["enc-key"], soft("enc-key")));
+      }
+      if (type === "gre") {
+        fields.push(
+          fieldText("enc-key", entry["enc-key"], soft("enc-key")),
+          fieldText("gre-key", entry["gre-key"], soft("gre-key"), false, "1"),
+          fieldNumber("pad-max", entry["pad-max"], soft("pad-max")),
+          fieldNumber("jitter-ms", entry["jitter-ms"], soft("jitter-ms")),
+        );
+      }
+      if (type === "webrtc") {
+        fields.push(
+          fieldText("enc-key", entry["enc-key"], soft("enc-key")),
+          fieldText("stun", entry.stun, soft("stun"), false, "stun:stun.l.google.com:19302"),
+          fieldNumber("pad-max", entry["pad-max"], soft("pad-max")),
+          fieldNumber("jitter-ms", entry["jitter-ms"], soft("jitter-ms")),
+        );
+      }
+      if (type === "moq") {
+        fields.push(
+          fieldText("enc-key", entry["enc-key"], soft("enc-key")),
+          fieldNumber("pad-max", entry["pad-max"], soft("pad-max")),
+          fieldNumber("jitter-ms", entry["jitter-ms"], soft("jitter-ms")),
+        );
+      }
+      if (type === "cwg") {
+        fields.push(
+          fieldText("enc-key", entry["enc-key"], soft("enc-key")),
+          fieldNumber("pad-max", entry["pad-max"], soft("pad-max")),
+          fieldNumber("jitter-ms", entry["jitter-ms"], soft("jitter-ms")),
         );
       }
       return el("div", { className: "grid" }, fields);
@@ -638,6 +722,7 @@
         set("listen", entry.listen);
         set("tls-cert", entry["tls-cert"]);
         set("tls-key", entry["tls-key"]);
+        set("enc-key", entry["enc-key"]);
       }
       if (type === "ftp") {
         set("listen", entry.listen);
@@ -650,6 +735,40 @@
         set("tls", !!entry.tls);
         set("tls-cert", entry["tls-cert"]);
         set("tls-key", entry["tls-key"]);
+      }
+      if (type === "tcp" || type === "udp") {
+        set("listen", entry.listen);
+        set("enc-key", entry["enc-key"]);
+      }
+      if (type === "gre") {
+        set("listen", entry.listen);
+        set("enc-key", entry["enc-key"]);
+        set("gre-key", entry["gre-key"]);
+        if (entry["pad-max"] > 0) out["pad-max"] = entry["pad-max"];
+        if (entry["jitter-ms"] > 0) out["jitter-ms"] = entry["jitter-ms"];
+      }
+      if (type === "webrtc") {
+        set("listen", entry.listen);
+        set("enc-key", entry["enc-key"]);
+        set("stun", entry.stun);
+        set("public-ip", entry["public-ip"]);
+        set("redirect", entry.redirect);
+        set("serve-dir", entry["serve-dir"]);
+        set("backend", entry.backend);
+        if (entry["pad-max"] > 0) out["pad-max"] = entry["pad-max"];
+        if (entry["jitter-ms"] > 0) out["jitter-ms"] = entry["jitter-ms"];
+      }
+      if (type === "moq") {
+        set("listen", entry.listen);
+        set("enc-key", entry["enc-key"]);
+        if (entry["pad-max"] > 0) out["pad-max"] = entry["pad-max"];
+        if (entry["jitter-ms"] > 0) out["jitter-ms"] = entry["jitter-ms"];
+      }
+      if (type === "cwg") {
+        set("listen", entry.listen);
+        set("enc-key", entry["enc-key"]);
+        if (entry["pad-max"] > 0) out["pad-max"] = entry["pad-max"];
+        if (entry["jitter-ms"] > 0) out["jitter-ms"] = entry["jitter-ms"];
       }
       return out;
     }
@@ -688,6 +807,7 @@
         set("front-host", entry["front-host"]);
         set("proxy", entry.proxy);
         set("insecure", !!entry.insecure);
+        set("enc-key", entry["enc-key"]);
       }
       if (type === "ftp") {
         set("user", entry.user);
@@ -700,6 +820,31 @@
         set("decoy", !!entry.decoy);
         set("tls", !!entry.tls);
         set("verbose", !!entry.verbose);
+      }
+      if (type === "tcp" || type === "udp") {
+        set("enc-key", entry["enc-key"]);
+      }
+      if (type === "gre") {
+        set("enc-key", entry["enc-key"]);
+        set("gre-key", entry["gre-key"]);
+        if (entry["pad-max"] > 0) out["pad-max"] = entry["pad-max"];
+        if (entry["jitter-ms"] > 0) out["jitter-ms"] = entry["jitter-ms"];
+      }
+      if (type === "webrtc") {
+        set("enc-key", entry["enc-key"]);
+        set("stun", entry.stun);
+        if (entry["pad-max"] > 0) out["pad-max"] = entry["pad-max"];
+        if (entry["jitter-ms"] > 0) out["jitter-ms"] = entry["jitter-ms"];
+      }
+      if (type === "moq") {
+        set("enc-key", entry["enc-key"]);
+        if (entry["pad-max"] > 0) out["pad-max"] = entry["pad-max"];
+        if (entry["jitter-ms"] > 0) out["jitter-ms"] = entry["jitter-ms"];
+      }
+      if (type === "cwg") {
+        set("enc-key", entry["enc-key"]);
+        if (entry["pad-max"] > 0) out["pad-max"] = entry["pad-max"];
+        if (entry["jitter-ms"] > 0) out["jitter-ms"] = entry["jitter-ms"];
       }
       return out;
     }

@@ -1,63 +1,43 @@
 package common
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/rand"
-	"crypto/sha256"
-	"io"
+	carriercore "github.com/lord-aali/PT-Proxy/carrier/core"
 )
 
 const (
-	NonceSize = 12
-	TagSize   = 16
+	NonceSize = carriercore.NonceSize
+	TagSize   = carriercore.TagSize
 )
 
-// Encryptor handles AES-GCM encryption/decryption with a shared key.
+// Encryptor wraps carrier/core AES-GCM (shared with tcp/udp and FTP).
 type Encryptor struct {
-	aead cipher.AEAD
+	inner *carriercore.Encryptor
 }
 
-// NewEncryptor creates an encryptor from a key (any length, will be hashed to 32 bytes).
 func NewEncryptor(key []byte) (*Encryptor, error) {
-	hash := sha256.Sum256(key)
-	block, err := aes.NewCipher(hash[:])
+	inner, err := carriercore.NewEncryptor(key)
 	if err != nil {
 		return nil, err
 	}
-	aead, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, err
-	}
-	return &Encryptor{aead: aead}, nil
+	return &Encryptor{inner: inner}, nil
 }
 
-// Encrypt encrypts plaintext and returns nonce||ciphertext.
 func (e *Encryptor) Encrypt(plaintext []byte) ([]byte, error) {
-	nonce := make([]byte, NonceSize)
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return nil, err
-	}
-	ciphertext := e.aead.Seal(nil, nonce, plaintext, nil)
-	return append(nonce, ciphertext...), nil
+	return e.inner.Encrypt(plaintext)
 }
 
-// Decrypt decrypts nonce||ciphertext.
 func (e *Encryptor) Decrypt(data []byte) ([]byte, error) {
-	if len(data) < NonceSize+TagSize {
+	pt, err := e.inner.Decrypt(data)
+	if err != nil {
 		return nil, ErrInvalidCiphertext
 	}
-	nonce := data[:NonceSize]
-	ciphertext := data[NonceSize:]
-	return e.aead.Open(nil, nonce, ciphertext, nil)
+	return pt, nil
 }
 
-// EncryptStream encrypts data in chunks for streaming (each chunk is independently encrypted).
 func (e *Encryptor) EncryptStream(data []byte) ([]byte, error) {
 	return e.Encrypt(data)
 }
 
-// DecryptStream decrypts a stream chunk.
 func (e *Encryptor) DecryptStream(data []byte) ([]byte, error) {
 	return e.Decrypt(data)
 }

@@ -2,15 +2,14 @@
 package common
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
-	"io"
 	mrand "math/rand"
 	"strings"
+
+	carriercore "github.com/lord-aali/PT-Proxy/carrier/core"
 )
 
 // ─── Frame types ──────────────────────────────────────────────────────────────
@@ -103,35 +102,19 @@ func DeriveKey(passphrase string) []byte {
 }
 
 func Encrypt(key, plaintext []byte) ([]byte, error) {
-	block, err := aes.NewCipher(key)
+	enc, err := carriercore.NewEncryptorRaw(key)
 	if err != nil {
 		return nil, err
 	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, err
-	}
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return nil, err
-	}
-	return gcm.Seal(nonce, nonce, plaintext, nil), nil
+	return enc.Encrypt(plaintext)
 }
 
 func Decrypt(key, ciphertext []byte) ([]byte, error) {
-	block, err := aes.NewCipher(key)
+	enc, err := carriercore.NewEncryptorRaw(key)
 	if err != nil {
 		return nil, err
 	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, err
-	}
-	ns := gcm.NonceSize()
-	if len(ciphertext) < ns {
-		return nil, fmt.Errorf("ciphertext too short")
-	}
-	return gcm.Open(nil, ciphertext[:ns], ciphertext[ns:], nil)
+	return enc.Decrypt(ciphertext)
 }
 
 // ─── Batch encode / decode ────────────────────────────────────────────────────

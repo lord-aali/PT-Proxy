@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WebRTC carrier — PT Proxy wiki</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="layout">
+    <nav id="nav"></nav>
+    <main>
+      <h1>WebRTC carrier</h1>
+      <p>Outer transport is a normal WebRTC data channel: ICE, DTLS, and SCTP, built with Pion. Signaling is a small HTTP POST of the SDP offer. Each data-channel message is one encrypted <code>carrier/core</code> frame. Forward and reverse match the other carriers.</p>
+
+      <h2>Example JSON (forward)</h2>
+<pre><code>{
+  "server": [
+    { "type": "socks", "listen": "127.0.0.1:0", "tag": "exit" },
+    {
+      "type": "webrtc",
+      "listen": "0.0.0.0:8443",
+      "tag": "webrtc-public",
+      "target": "exit",
+      "enc-key": "change-me-please",
+      "stun": "stun:stun.l.google.com:19302",
+      "public-ip": "203.0.113.10"
+    }
+  ],
+  "client": [
+    {
+      "type": "webrtc",
+      "listen": "127.0.0.1:1080",
+      "address": "http://203.0.113.10:8443/webrtc",
+      "enc-key": "change-me-please",
+      "stun": "stun:stun.l.google.com:19302",
+      "tag": "webrtc-fwd"
+    }
+  ]
+}</code></pre>
+
+      <h2>Server fields</h2>
+      <ul>
+        <li><code>listen</code> — HTTP signaling bind. Default <code>0.0.0.0:8443</code>. Path is <code>/webrtc</code>.</li>
+        <li><code>target</code> — service tag for forward flows</li>
+        <li><code>enc-key</code> — encrypts frames inside the data channel</li>
+        <li><code>stun</code> — optional STUN URL. Empty uses host candidates only (fine on a public IP or localhost).</li>
+        <li><code>public-ip</code> — optional 1:1 NAT address advertised as a host candidate</li>
+        <li><code>redirect</code> — optional URL. Browser requests (anything except <code>POST /webrtc</code>) redirect here. Takes priority over <code>backend</code> and <code>serve-dir</code>.</li>
+        <li><code>backend</code> — optional URL. Every path except <code>/webrtc</code> is reverse-proxied here and the request path is kept, so <code>/blog</code> fetches <code>https://example.com/blog</code>. A domain name is sent as the Host header and, for HTTPS, as the TLS server name. An IP backend keeps the incoming Host header.</li>
+        <li><code>serve-dir</code> — optional directory to serve as a static site. <code>index.html</code> is the default document.</li>
+        <li><code>pad-max</code> / <code>jitter-ms</code> — optional shaping</li>
+      </ul>
+
+      <h2>Client fields</h2>
+      <ul>
+        <li><code>address</code> — signaling URL (<code>http://host:8443</code> or <code>http://host:8443/webrtc</code>)</li>
+        <li><code>listen</code> — local TCP+UDP bind (forward) or remote publish address (reverse)</li>
+        <li><code>enc-key</code> — must match the server</li>
+        <li><code>stun</code> — optional, same idea as the server</li>
+        <li><code>reverse-tag</code> — optional</li>
+      </ul>
+
+      <h2>Notes</h2>
+      <ul>
+        <li>ICE uses UDP. Allow the signaling TCP port and UDP for the ICE candidates.</li>
+        <li>No root requirement. This is not a raw socket.</li>
+        <li>The data channel label is <code>ptproxy</code>. DTLS and ICE are genuine WebRTC.</li>
+        <li><code>GET /</code> is a cover page. With no <code>redirect</code>, <code>backend</code>, or <code>serve-dir</code> it returns a short HTML page instead of 404. <code>/webrtc</code> stays the signaling path and is not forwarded to <code>backend</code>.</li>
+      </ul>
+    </main>
+  </div>
+  <script src="nav.js"></script>
+</body>
+</html>

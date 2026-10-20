@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Custom WG carrier — PT Proxy wiki</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="layout">
+    <nav id="nav"></nav>
+    <main>
+      <h1>Custom WG carrier</h1>
+      <p>Outer transport is UDP. Each datagram is one ChaCha20-Poly1305 blob carrying an encrypted <code>carrier/core</code> frame. The header is a 16-byte marker, class, direction, and counter. It is not a WireGuard handshake, mac1, mac2, or transport header, and it does not speak to WireGuard peers. Forward and reverse match the other carriers.</p>
+
+      <h2>Example JSON (forward)</h2>
+<pre><code>{
+  "server": [
+    { "type": "socks", "listen": "127.0.0.1:0", "tag": "exit" },
+    {
+      "type": "cwg",
+      "listen": "0.0.0.0:4446",
+      "tag": "cwg-public",
+      "target": "exit",
+      "enc-key": "change-me-please"
+    }
+  ],
+  "client": [
+    {
+      "type": "cwg",
+      "listen": "127.0.0.1:1080",
+      "address": "203.0.113.10:4446",
+      "enc-key": "change-me-please",
+      "tag": "cwg-fwd"
+    }
+  ]
+}</code></pre>
+
+      <h2>Server fields</h2>
+      <ul>
+        <li><code>listen</code> — UDP bind. Default <code>0.0.0.0:4446</code>.</li>
+        <li><code>target</code> — service tag for forward flows</li>
+        <li><code>enc-key</code> — hashed to the ChaCha20-Poly1305 key</li>
+        <li><code>pad-max</code> / <code>jitter-ms</code> — optional shaping</li>
+      </ul>
+
+      <h2>Client fields</h2>
+      <ul>
+        <li><code>address</code> — server <code>host:port</code></li>
+        <li><code>listen</code> — local TCP+UDP bind (forward) or remote publish address (reverse)</li>
+        <li><code>enc-key</code> — must match the server</li>
+        <li><code>reverse-tag</code> — optional</li>
+      </ul>
+
+      <h2>Notes</h2>
+      <ul>
+        <li>Allow UDP on the listen port. There is no TCP port and no root requirement.</li>
+        <li>Packets are kept off WireGuard's fixed sizes (64, 92, and 148 bytes) and off 16-byte alignment.</li>
+        <li>A 64-packet window accepts reordered datagrams. Older duplicates are dropped.</li>
+      </ul>
+    </main>
+  </div>
+  <script src="nav.js"></script>
+</body>
+</html>
