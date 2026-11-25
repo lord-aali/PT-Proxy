@@ -70,6 +70,5 @@ func launchCarrierClient(c configuration.JsonClientConfigImpl, tag, reverseAddr 
 			lg.Error("carrier client stopped:", err)
 		}
 	}()
-	lg.Info("carrier", c.Type, "client started (listen:", cfg.Listen, "address:", cfg.Address+")")
 	return true
 }

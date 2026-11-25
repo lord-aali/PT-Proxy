@@ -213,7 +213,7 @@ func RunUDPClient(cfg Config) error {
 				LogTag:      cfg.LogTag,
 			})
 		} else {
-			err = core.RunClientForward(sess, cfg.Listen, "", cfg.SkipUDP, cfg.LogTag)
+			err = core.RunClientForward(sess, cfg.Listen, "", cfg.SkipUDP, cfg.LogTag, "udp", cfg.Address)
 		}
 		_ = sess.Close()
 		if err != nil {

@@ -11,7 +11,7 @@
     <nav id="nav"></nav>
     <main>
       <h1>Forward and reverse</h1>
-      <p>Every camouflage tunnel can carry TCP streams and UDP datagrams (UDP is framed inside the tunnel). What you attach at each end is a tagged service: socks, http, or external.</p>
+      <p>Every camouflage tunnel can carry TCP streams and UDP datagrams (UDP is framed inside the tunnel), except <a href="dns.html">dns</a>. That tunnel is forward-only raw TCP: one accepted connection is one stream, there is no UDP associate, and <code>reverse-tag</code> is not used. What you attach at each end is a tagged service: socks, http, or external.</p>
 
       <h2>Forward</h2>
       <p>The service runs beside the tunnel server. The client binds <code>listen</code> locally. Applications connect to that port; each TCP connection and each UDP packet is carried to the service named by the server’s <code>target</code>.</p>

@@ -116,7 +116,7 @@
 
     .layout {
       display: grid;
-      grid-template-columns: 1.15fr 0.85fr;
+      grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
       gap: 1.25rem;
       align-items: start;
     }
@@ -125,7 +125,7 @@
       .preview-panel { position: static !important; }
     }
 
-    .stack { display: grid; gap: 1rem; }
+    .stack { display: grid; gap: 1rem; min-width: 0; }
     .panel {
       background: var(--panel);
       border: 1px solid var(--line);
@@ -133,6 +133,7 @@
       box-shadow: var(--shadow);
       overflow: hidden;
       animation: rise 0.65s ease both;
+      min-width: 0;
     }
     .panel-head {
       display: flex;
@@ -190,7 +191,10 @@
       gap: 0.7rem;
     }
     @media (max-width: 640px) {
+      .wrap { width: min(1180px, calc(100% - 1rem)); padding-top: 1.25rem; }
       .grid { grid-template-columns: 1fr; }
+      .panel-head { flex-wrap: wrap; }
+      button, .file-btn { min-height: 44px; }
     }
     .field { display: grid; gap: 0.28rem; }
     .field.full { grid-column: 1 / -1; }
@@ -243,6 +247,7 @@
       padding: 1rem;
       max-height: min(72vh, 820px);
       overflow: auto;
+      max-width: 100%;
       background: #101820;
       color: #d7e6df;
       font: 400 0.82rem/1.5 var(--mono);
@@ -323,8 +328,8 @@
   <div class="toast" id="toast"></div>
 
   <script>
-    const SERVER_TYPES = ["socks", "http", "external", "obfs4", "obfs3", "obfs2", "dpi", "snowflake", "ftp", "tcp", "udp", "gre", "webrtc", "moq", "cwg"];
-    const CLIENT_TYPES = ["obfs4", "obfs3", "obfs2", "dpi", "snowflake", "ftp", "tcp", "udp", "gre", "webrtc", "moq", "cwg"];
+    const SERVER_TYPES = ["socks", "http", "external", "obfs4", "obfs3", "obfs2", "dpi", "snowflake", "ftp", "tcp", "udp", "gre", "webrtc", "moq", "cwg", "dns"];
+    const CLIENT_TYPES = ["obfs4", "obfs3", "obfs2", "dpi", "snowflake", "ftp", "tcp", "udp", "gre", "webrtc", "moq", "cwg", "dns"];
     const isObfs = (t) => t === "obfs4" || t === "obfs3" || t === "obfs2";
     const isService = (t) => t === "socks" || t === "http" || t === "external";
 
@@ -345,6 +350,7 @@
       if (type === "webrtc") return "0.0.0.0:8443";
       if (type === "moq") return "0.0.0.0:4433";
       if (type === "cwg") return "0.0.0.0:4446";
+      if (type === "dns") return ":53";
       return "0.0.0.0:3334";
     }
 
@@ -356,7 +362,6 @@
         listen: defaultListen(type),
         cert: "",
         "private-key": "",
-        "enc-key": "change-me-shared-key",
         protocol: "auto",
         http: "",
         https: "",
@@ -378,13 +383,16 @@
         "gre-key": "1",
         "pad-max": 0,
         "jitter-ms": 0,
+        domain: "",
+        mtu: 1232,
+        "enc-key": "change-me-shared-key",
       };
     }
 
     function defaultClient(type) {
       return {
         type,
-        listen: "127.0.0.1:1080",
+        listen: type === "dns" ? "127.0.0.1:7000" : "127.0.0.1:1080",
         tag: "",
         "reverse-tag": "",
         address: type === "dpi" ? "https://127.0.0.1:443" : type === "snowflake" ? "ws://127.0.0.1:8080/" : type === "ftp" ? "127.0.0.1:21" : type === "udp" ? "127.0.0.1:4444" : type === "tcp" ? "127.0.0.1:4443" : type === "gre" ? "127.0.0.1" : type === "webrtc" ? "http://127.0.0.1:8443/webrtc" : type === "moq" ? "127.0.0.1:4433" : type === "cwg" ? "127.0.0.1:4446" : "127.0.0.1:3334",
@@ -415,6 +423,11 @@
         "gre-key": "1",
         "pad-max": 0,
         "jitter-ms": 0,
+        domain: "",
+        udp: type === "dns" ? "8.8.8.8:53" : "",
+        direct: "",
+        qtype: "txt",
+        "packet-size": 0,
       };
     }
 
@@ -502,7 +515,7 @@
       ];
 
       if (type !== "dpi") {
-        fields.push(fieldText("listen", entry.listen, soft("listen"), false, type === "socks" || type === "http" ? "127.0.0.1:0" : type === "external" ? "127.0.0.1:22" : "0.0.0.0:3334"));
+        fields.push(fieldText("listen", entry.listen, soft("listen"), false, type === "socks" || type === "http" ? "127.0.0.1:0" : type === "external" ? "127.0.0.1:22" : type === "dns" ? ":53" : "0.0.0.0:3334"));
       }
       if (!isService(type)) {
         fields.push(fieldText("target", entry.target, soft("target"), false, "tag of socks/http/external"));
@@ -590,6 +603,13 @@
           fieldNumber("jitter-ms", entry["jitter-ms"], soft("jitter-ms")),
         );
       }
+      if (type === "dns") {
+        fields.push(
+          fieldText("domain", entry.domain, soft("domain"), false, "t.example.com"),
+          fieldText("enc-key", entry["enc-key"], soft("enc-key"), false, "required shared secret"),
+          fieldNumber("mtu", entry.mtu, soft("mtu")),
+        );
+      }
       return el("div", { className: "grid" }, fields);
     }
 
@@ -600,11 +620,25 @@
       const fields = [
         fieldSelect("type", type, CLIENT_TYPES, hard("type")),
         fieldText("tag", entry.tag, soft("tag"), false, "auto type-port if empty"),
-        fieldText("listen", entry.listen, soft("listen"), false, "127.0.0.1:1080"),
-        fieldText("address", entry.address, soft("address"), true,
-          type === "dpi" ? "https://host:443" : type === "snowflake" ? "ws://host:8080/" : "host:port"),
-        fieldText("reverse-tag", entry["reverse-tag"], soft("reverse-tag"), false, "service tag in this file's server list"),
       ];
+      if (type === "dns") {
+        fields.push(
+          fieldText("listen", entry.listen, soft("listen"), false, "127.0.0.1:7000"),
+          fieldText("domain", entry.domain, soft("domain"), false, "t.example.com"),
+          fieldText("enc-key", entry["enc-key"], soft("enc-key"), false, "required shared secret"),
+          fieldText("udp", entry.udp, soft("udp"), false, "8.8.8.8:53"),
+          fieldText("direct", entry.direct, soft("direct"), false, "vps:53, lab only"),
+          fieldSelect("qtype", entry.qtype || "txt", ["txt", "aaaa", "a"], soft("qtype")),
+          fieldNumber("packet-size", entry["packet-size"], soft("packet-size")),
+        );
+      } else {
+        fields.push(
+          fieldText("listen", entry.listen, soft("listen"), false, "127.0.0.1:1080"),
+          fieldText("address", entry.address, soft("address"), true,
+            type === "dpi" ? "https://host:443" : type === "snowflake" ? "ws://host:8080/" : "host:port"),
+          fieldText("reverse-tag", entry["reverse-tag"], soft("reverse-tag"), false, "service tag in this file's server list"),
+        );
+      }
 
       if (type === "obfs4") {
         fields.push(
@@ -770,6 +804,12 @@
         if (entry["pad-max"] > 0) out["pad-max"] = entry["pad-max"];
         if (entry["jitter-ms"] > 0) out["jitter-ms"] = entry["jitter-ms"];
       }
+      if (type === "dns") {
+        set("listen", entry.listen);
+        set("domain", entry.domain);
+        set("enc-key", entry["enc-key"]);
+        if (entry.mtu > 0) out.mtu = entry.mtu;
+      }
       return out;
     }
 
@@ -786,8 +826,17 @@
 
       set("tag", entry.tag);
       set("listen", entry.listen);
-      set("address", entry.address);
-      set("reverse-tag", entry["reverse-tag"]);
+      if (type !== "dns") {
+        set("address", entry.address);
+        set("reverse-tag", entry["reverse-tag"]);
+      } else {
+        set("domain", entry.domain);
+        set("enc-key", entry["enc-key"]);
+        if ((entry.qtype || "txt") !== "txt") set("qtype", entry.qtype);
+        if (entry["packet-size"] > 0) set("packet-size", entry["packet-size"]);
+        if ((entry.direct || "").trim()) set("direct", entry.direct);
+        else set("udp", entry.udp);
+      }
 
       if (type === "obfs4") {
         set("cert", entry.cert);

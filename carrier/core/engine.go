@@ -2,6 +2,7 @@ package core
 
 import (
 	"io"
+	"log"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -223,8 +224,9 @@ func (e *Engine) acceptReverse(ln net.Listener) {
 		e.flows[id] = &flow{conn: c}
 		e.mu.Unlock()
 		if err := e.write(Frame{Type: TypeReverseOpen, ConnID: id}); err != nil {
+			log.Printf("reverse open: %v", err)
 			e.unregister(id)
-			return
+			continue
 		}
 		go e.pumpTCP(id, c)
 	}

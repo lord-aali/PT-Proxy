@@ -9,4 +9,4 @@ Pages:
 - [Forward & reverse](forward-reverse.html)
 - [Mux layer](muxpipe.html)
 - [socks](socks.html) · [http](http.html) · [external](external.html)
-- [obfs](obfs.html) · [DPI](dpi.html) · [Snowflake](snowflake.html) · [FTP](ftp.html)
+- [obfs](obfs.html) · [DPI](dpi.html) · [Snowflake](snowflake.html) · [FTP](ftp.html) · [DNS](dns.html)

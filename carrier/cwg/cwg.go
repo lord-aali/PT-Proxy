@@ -189,7 +189,7 @@ func runClientOnce(aead cipher.AEAD, cfg Config, lg ptlog.PTLog) error {
 			LogTag:      cfg.LogTag,
 		})
 	}
-	return core.RunClientForward(sess, cfg.Listen, "", cfg.SkipUDP, cfg.LogTag)
+	return core.RunClientForward(sess, cfg.Listen, "", cfg.SkipUDP, cfg.LogTag, "cwg", cfg.Address)
 }
 
 func (l *Link) Close() error {

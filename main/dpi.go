@@ -154,7 +154,7 @@ func launchDpiClient(c configuration.JsonClientConfigImpl, tag, reverseAddr stri
 		lg.Error("dpi client listen failed:", err)
 		return false
 	}
-	lg.InfoDelayed(time.Second, "Client started listening", socksAddr, "forward via dpi")
+	lg.InfoDelayed(time.Second, "Client started listening", socksAddr, "forward via dpi ("+uplink+") to", c.Address)
 	return true
 }
 

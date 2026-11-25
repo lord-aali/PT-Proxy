@@ -12,6 +12,8 @@ type RunConfig struct {
 	ReverseAddr string
 	SkipUDP     bool
 	LogTag      string
+	Protocol    string
+	Destination string
 }
 
 // RunClientLoop dials a carrier, handshakes, then serves forward (raw listen)
@@ -40,7 +42,7 @@ func RunClientLoop(dial func() (FrameConn, error), cfg RunConfig) {
 				LogTag:      cfg.LogTag,
 			})
 		} else {
-			err = RunClientForward(sess, cfg.Listen, "", cfg.SkipUDP, cfg.LogTag)
+			err = RunClientForward(sess, cfg.Listen, "", cfg.SkipUDP, cfg.LogTag, cfg.Protocol, cfg.Destination)
 		}
 		_ = sess.Close()
 		if err != nil {

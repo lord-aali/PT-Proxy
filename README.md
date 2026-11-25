@@ -2,7 +2,7 @@
 
 PT Proxy is a single binary that runs censorship-circumvention tunnels from one JSON file. You can run a public bridge, a client, or both in the same process.
 
-You compose **services** (`socks`, `http`, `external`) and **tunnels** (obfs, DPI, Snowflake, FTP, TCP/UDP, GRE, WebRTC). Tags wire them for forward or reverse pipes.
+You compose **services** (`socks`, `http`, `external`) and **tunnels** (obfs, DPI, Snowflake, FTP, TCP/UDP, GRE, WebRTC, DNS). Tags wire them for forward or reverse pipes. The DNS tunnel is forward-only.
 
 `If this project helps you, consider leaving a star. ⭐`
 
@@ -27,7 +27,7 @@ A forward tunnel means: the interesting service lives on the **server** machine 
 
 You declare the service in the `server` list — SOCKS5, HTTP CONNECT, or an existing process (`external`). Give it a `tag`, or let PT Proxy name it `type-port` after it binds. The tunnel server (obfs, DPI, Snowflake, FTP) sets `target` to that tag and pipes bytes there.
 
-In client, the tunnel client binds `listen`. TCP and UDP share that same host:port and client connects to the tagged service through the obfuscated tunnel.
+In client, the tunnel client binds `listen`. TCP and UDP share that same host:port and client connects to the tagged service through the obfuscated tunnel. The DNS tunnel is the exception: `listen` is raw TCP only, and the client does not dial the VPS. It sends DNS queries to a resolver (`udp`) or, in the lab, straight to the VPS (`direct`). See [DNS](#dns-tunnel).
 
 Order of events: the service starts and gets a tag → the tunnel server starts and points `target` at it → the client connects to `address` and binds `listen` → each local accept or datagram is one flow to the far side.
 
@@ -37,7 +37,7 @@ A reverse tunnel means: the interesting service is on **your** machine (or LAN),
 
 The client still lists that service under `server`. That array means “services this process owns,” not “I am the public bridge.” The tunnel **client** sets `reverse-tag` to that tag and uses `listen` as the host:port that should appear **on the VPS**. The VPS tunnel may omit `target` (reverse-only hub) or keep a `target` for forward clients on the same listener. After the client connects, the hub binds that `listen` (TCP and UDP). Someone hitting the VPS port is forwarded back to the client service.
 
-If `reverse-tag` is missing, PT Proxy logs an error and skips that client.
+If `reverse-tag` is missing, PT Proxy logs an error and skips that client. The DNS tunnel does not use `reverse-tag`.
 
 ## Scenarios
 
@@ -163,7 +163,7 @@ Run `socks` in the client `server` list, and a reverse client whose `reverse-tag
 | `listen` | external | Required dial address of the real backend. No default. |
 | `user` / `pass` | socks | Optional SOCKS auth. Omitted = no auth. |
 
-Client tunnel `listen` defaults to `127.0.0.1:1080`. Server obfs `listen` defaults to `0.0.0.0:3334`, Snowflake `0.0.0.0:8080`, FTP `0.0.0.0:21`, DPI HTTPS `0.0.0.0:443`, TCP carrier `0.0.0.0:4443`, UDP carrier `0.0.0.0:4444`.
+Client tunnel `listen` defaults to `127.0.0.1:1080`. Server obfs `listen` defaults to `0.0.0.0:3334`, Snowflake `0.0.0.0:8080`, FTP `0.0.0.0:21`, DPI HTTPS `0.0.0.0:443`, TCP carrier `0.0.0.0:4443`, UDP carrier `0.0.0.0:4444`, DNS `:53` (UDP). A DNS client `listen` defaults to `127.0.0.1:7000` and is a raw TCP forward, not a SOCKS port.
 
 Logs look like `[obfs4-3334]` so you can tell entries apart.
 
@@ -211,6 +211,35 @@ Real QUIC connection with Media over QUIC Transport draft 16 (`ALPN moqt-16`). N
 ### Custom WG carrier
 
 UDP datagrams sealed with ChaCha20-Poly1305. The layout is not WireGuard: no handshake initiation, no mac1/mac2, and no transport type-4 header, so it does not interoperate with WireGuard. Inner frames are `carrier/core`. **Server:** `listen` (default `0.0.0.0:4446`), `enc-key`, optional `target`. **Client:** `address` (`host:port`), `listen`, `enc-key`, optional `reverse-tag`. No root requirement. See [`doc/cwg.html`](doc/cwg.html).
+
+### DNS tunnel
+
+Plain UDP DNS, JSON type `dns`. Local TCP is carried as TXT queries for long names under `domain`. The session is KCP, Noise, then smux. One smux stream is one raw TCP connection to `target` (`socks`, `http`, or `external`). No muxpipe, no UDP associate, and no `reverse-tag`. A stock dnstt peer cannot decode the session. DoH and DoT are not used.
+
+**Server:** `listen` (UDP, default `:53`), required `domain` and `enc-key`, optional `mtu` (default `1232`), `target`. The process is authoritative for `domain`. **Client:** `listen` (default `127.0.0.1:7000`, a raw TCP forward, not a SOCKS port), the same `domain` and `enc-key`, and either `udp` or `direct`.
+
+`udp` is a recursive resolver (`8.8.8.8:53` or the ISP resolver). The client does not dial the VPS. The resolver walks root, the TLD, and the NS record for `domain`. That path still works when every TCP connection is blocked, as long as UDP/53 to the resolver works. `direct` sends the same queries straight at the VPS and skips the hierarchy. Use it in a lab with no NS delegation.
+
+Both sides share `enc-key`. The query blob and the answer are ChaCha20 with an 8-byte nonce and a 4-byte tag. Optional client `packet-size` sets how many KCP bytes go in each query; omit it and the client uses the largest payload that fits under `domain`. DPI and the resolver still see a DNS lookup for a long subdomain of `domain`. They do not see the TCP payload. See [`doc/dns.html`](doc/dns.html).
+
+```json
+{
+  "server": [
+    { "type": "socks", "listen": "127.0.0.1:0", "tag": "exit" },
+    { "type": "dns", "listen": ":53", "domain": "t.example.com", "enc-key": "shared-secret", "target": "exit" }
+  ]
+}
+```
+
+```json
+{
+  "client": [
+    { "type": "dns", "listen": "127.0.0.1:7000", "domain": "t.example.com", "enc-key": "shared-secret", "udp": "8.8.8.8:53" }
+  ]
+}
+```
+
+Lab, no NS delegation: replace `udp` with `"direct": "<vps>:53"`.
 
 ## Build
 

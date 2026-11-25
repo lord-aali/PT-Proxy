@@ -62,6 +62,5 @@ func launchWebRTCClient(c configuration.JsonClientConfigImpl, tag, reverseAddr s
 			lg.Error("webrtc client stopped:", err)
 		}
 	}()
-	lg.Info("carrier webrtc client started (listen:", cfg.Listen, "address:", cfg.Address+")")
 	return true
 }

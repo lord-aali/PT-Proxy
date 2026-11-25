@@ -287,8 +287,6 @@ func (s *muxSession) deliver(connID uint32, data []byte) {
 	select {
 	case p.ch <- data:
 	case <-p.closed:
-	default:
-		// Drop rather than block the whole session demux (HOL).
 	}
 }
 

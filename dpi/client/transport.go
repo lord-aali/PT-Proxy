@@ -460,19 +460,20 @@ func (t *Transport) handleReverseOpen(connID uint32) {
 		return
 	}
 	atomic.AddInt32(&t.active, 1)
-	local, err := net.Dial("tcp", t.ReverseLocal)
-	if err != nil {
-		t.log.Error("reverse dial:", err)
-		_ = t.CloseConn(connID)
-		return
-	}
-	defer local.Close()
+	// Read the tunnel before dialing so bytes already in flight (the SOCKS
+	// greeting from an in-process carrier) are queued instead of dropped.
 	tunnel, err := newTunnelConn(t, connID, t.log, false)
 	if err != nil {
 		_ = t.CloseConn(connID)
 		return
 	}
 	defer tunnel.Close()
+	local, err := net.Dial("tcp", t.ReverseLocal)
+	if err != nil {
+		t.log.Error("reverse dial:", err)
+		return
+	}
+	defer local.Close()
 	errCh := make(chan error, 2)
 	go func() { _, err := io.Copy(tunnel, local); errCh <- err }()
 	go func() { _, err := io.Copy(local, tunnel); errCh <- err }()

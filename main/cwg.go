@@ -56,6 +56,5 @@ func launchCWGClient(c configuration.JsonClientConfigImpl, tag, reverseAddr stri
 			lg.Error("cwg client stopped:", err)
 		}
 	}()
-	lg.Info("carrier cwg client started (listen:", cfg.Listen, "address:", cfg.Address+")")
 	return true
 }

@@ -254,7 +254,7 @@ func runClientOnce(api *pion.API, enc *core.Encryptor, cfg Config, signalURL str
 			LogTag:      cfg.LogTag,
 		})
 	}
-	return core.RunClientForward(sess, cfg.Listen, "", cfg.SkipUDP, cfg.LogTag)
+	return core.RunClientForward(sess, cfg.Listen, "", cfg.SkipUDP, cfg.LogTag, "webrtc", cfg.Address)
 }
 
 func postOffer(url string, offer signalMessage) (signalMessage, error) {

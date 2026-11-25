@@ -45,7 +45,7 @@ func TestClientForwardEcho(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- RunClientForward(sess, "127.0.0.1:0", "", false, "test")
+		done <- RunClientForward(sess, "127.0.0.1:0", "", false, "test", "tcp", "127.0.0.1:1")
 	}()
 
 	// RunClientForward logs bound address but we need the actual port — open a

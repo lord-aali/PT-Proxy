@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"strings"
-	"time"
 
 	"github.com/lord-aali/PT-Proxy/common/configuration"
 	"github.com/lord-aali/PT-Proxy/common/ptlog"
@@ -97,6 +96,5 @@ func launchFtpClient(c configuration.JsonClientConfigImpl, tag, reverseAddr stri
 			lg.Error("ftp client stopped:", err)
 		}
 	}()
-	lg.InfoDelayed(time.Second, "ftp client started (listen:", cfg.Listen, "ftp:", cfg.FTP+")")
 	return true
 }

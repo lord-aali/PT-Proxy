@@ -687,7 +687,7 @@ func serveTCPForward(ctx context.Context, addr string) error {
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
-	lg.InfoDelayed(time.Second, fmt.Sprintf("Client started listening %s forward via ftp", bound))
+	lg.InfoDelayed(time.Second, fmt.Sprintf("Client started listening %s forward via ftp to %s", bound, cfgFTP))
 	go func() {
 		<-ctx.Done()
 		ln.Close()
@@ -849,7 +849,9 @@ func pipeExisting(conn net.Conn, connID uint32, target string, socksReply bool) 
 	defer unregisterTCP(connID)
 
 	if target != "" {
-		sendNow(&common.Frame{ConnID: connID, Type: common.TypeOpen, Seq: 0, Data: []byte(target)})
+		// Synchronous: a concurrent sendNow of the first payload can otherwise
+		// hit the server before Open, and the server would have no upstream yet.
+		sendFrames([]*common.Frame{{ConnID: connID, Type: common.TypeOpen, Seq: 0, Data: []byte(target)}})
 	}
 	if socksReply {
 		_, _ = conn.Write([]byte{5, 0, 0, 1, 0, 0, 0, 0, 0, 0})
@@ -1082,6 +1084,7 @@ func Run(ctx context.Context, c Config) error {
 	go func() {
 		if cfgReverse != "" {
 			sendNow(&common.Frame{ConnID: 0, Type: common.TypeReverseBind, Data: []byte(cfgListen)})
+			lg.InfoDelayed(time.Second, fmt.Sprintf("Client reverse published %s via ftp to %s", cfgListen, cfgFTP))
 			<-ctx.Done()
 			errCh <- nil
 			return

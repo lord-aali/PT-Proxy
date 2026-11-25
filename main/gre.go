@@ -59,6 +59,5 @@ func launchGREClient(c configuration.JsonClientConfigImpl, tag, reverseAddr stri
 			lg.Error("gre client stopped:", err)
 		}
 	}()
-	lg.Info("carrier gre client started (listen:", cfg.Listen, "address:", cfg.Address+")")
 	return true
 }

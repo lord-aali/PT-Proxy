@@ -56,6 +56,5 @@ func launchMoQClient(c configuration.JsonClientConfigImpl, tag, reverseAddr stri
 			lg.Error("moq client stopped:", err)
 		}
 	}()
-	lg.Info("carrier moq client started (listen:", cfg.Listen, "address:", cfg.Address+")")
 	return true
 }

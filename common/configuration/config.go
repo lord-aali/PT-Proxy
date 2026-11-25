@@ -30,7 +30,7 @@ type JsonConfigImpl struct {
 }
 
 type JsonServerConfigImpl struct {
-	Type       string `json:"type"`             // socks, http, external, obfs2-4, dpi, snowflake, ftp, tcp, udp, gre, webrtc, moq, cwg
+	Type       string `json:"type"`             // socks, http, external, obfs2-4, dpi, snowflake, ftp, tcp, udp, gre, webrtc, moq, cwg, dns
 	Tag        string `json:"tag,omitempty"`    // handle for target / reverse-tag; default type-port
 	Listen     string `json:"listen,omitempty"` // bind (tunnels, socks, http) or dial address (external)
 	Target     string `json:"target,omitempty"` // tunnel server: pipe to this service tag
@@ -64,6 +64,9 @@ type JsonServerConfigImpl struct {
 	JitterMS int    `json:"jitter-ms,omitempty"`
 	STUN     string `json:"stun,omitempty"`
 	PublicIP string `json:"public-ip,omitempty"`
+
+	Domain string `json:"domain,omitempty"`
+	MTU    int    `json:"mtu,omitempty"`
 }
 
 type JsonClientConfigImpl struct {
@@ -99,6 +102,12 @@ type JsonClientConfigImpl struct {
 	JitterMS int    `json:"jitter-ms,omitempty"`
 	STUN     string `json:"stun,omitempty"`
 	PublicIP string `json:"public-ip,omitempty"`
+
+	Domain     string `json:"domain,omitempty"`
+	UDP        string `json:"udp,omitempty"`
+	Direct     string `json:"direct,omitempty"`
+	QType      string `json:"qtype,omitempty"`
+	PacketSize int    `json:"packet-size,omitempty"`
 }
 
 func Load(path string) JsonConfigImpl {

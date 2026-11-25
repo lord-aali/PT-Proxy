@@ -154,7 +154,7 @@ func runClientOnce(enc *core.Encryptor, cfg Config, addr string, lg ptlog.PTLog)
 			LogTag:      cfg.LogTag,
 		})
 	}
-	return core.RunClientForward(sess, cfg.Listen, "", cfg.SkipUDP, cfg.LogTag)
+	return core.RunClientForward(sess, cfg.Listen, "", cfg.SkipUDP, cfg.LogTag, "moq", cfg.Address)
 }
 
 func attach(parent context.Context, conn moqtransport.Connection, publishTrack, subscribeTrack string, enc *core.Encryptor, cfg Config, closeFn func()) (*Link, error) {

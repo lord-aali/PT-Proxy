@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DNS tunnel — PT Proxy wiki</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="layout">
+    <nav id="nav"></nav>
+    <main>
+      <h1>DNS tunnel</h1>
+      <p>JSON type <code>dns</code>. Local TCP is carried as DNS queries for long names under a domain you control. The default query type is TXT. A client can set <code>qtype</code> to <code>aaaa</code> or <code>a</code> instead. The session is KCP, then Noise, then smux. One smux stream is one raw TCP connection to the tagged service. This is a PT Proxy session: a stock dnstt client or server cannot decode it. There is no DoH, no DoT, and no UDP associate. <code>reverse-tag</code> is not used.</p>
+
+      <h2>Use cases</h2>
+      <ul>
+        <li>A network that still allows UDP/53 to a recursive resolver, including one that blocks every TCP connection.</li>
+        <li>Forward a tagged <code>socks</code>, <code>http</code>, or <code>external</code> service. The client <code>listen</code> port is a raw TCP forward. It is not a SOCKS listener of its own. If <code>target</code> is socks, the application speaks SOCKS on that port and the handshake is answered by the far service.</li>
+        <li>Lab use without an NS delegation, by sending the same queries straight at the VPS.</li>
+      </ul>
+
+      <h2>How a query reaches the VPS</h2>
+      <p>The server listens for ordinary UDP DNS and is authoritative for <code>domain</code>. Each query name is a fresh long subdomain of that domain. The labels hide one encrypted blob. The answer is encrypted the same way: one TXT record, or a list of AAAA or A records when the client asked for those. Anyone who can read the packet still sees DNS.</p>
+      <p><code>udp</code> and <code>direct</code> are mutually exclusive.</p>
+      <ul>
+        <li><code>udp</code> — the client sends the query to a recursive resolver (<code>8.8.8.8:53</code>, the ISP resolver, or another resolver that still recurses). The client does not dial the VPS and does not walk the hierarchy itself. The resolver does: root, the TLD, then the NS record for <code>domain</code>, which must point at the VPS. The client needs <code>domain</code>, <code>enc-key</code>, and the resolver address.</li>
+        <li><code>direct</code> — the client sends those same UDP queries straight to the VPS. There is no resolver and no NS delegation. Use this in a lab, and only when the network allows UDP to the VPS address. A network that allows DNS only toward its own resolver will drop it.</li>
+      </ul>
+      <p>DoH and DoT are not transports here. Both are TCP. On a network that blocks TCP they would not start, and they are not implemented for this tunnel.</p>
+
+      <h2>Example JSON (forward, via a resolver)</h2>
+<pre><code>{
+  "server": [
+    { "type": "socks", "listen": "127.0.0.1:0", "tag": "exit" },
+    {
+      "type": "dns",
+      "listen": ":53",
+      "domain": "t.example.com",
+      "enc-key": "shared-secret",
+      "mtu": 1232,
+      "target": "exit"
+    }
+  ],
+  "client": [
+    {
+      "type": "dns",
+      "listen": "127.0.0.1:7000",
+      "domain": "t.example.com",
+      "enc-key": "shared-secret",
+      "udp": "8.8.8.8:53"
+    }
+  ]
+}</code></pre>
+      <p>An application that connects to <code>127.0.0.1:7000</code> is one TCP stream to the service tagged <code>exit</code>. Point a browser’s SOCKS proxy at that port only when <code>exit</code> is a socks service. The bytes on <code>7000</code> are copied through; the dns client does not speak SOCKS itself.</p>
+      <p>Lab, no NS delegation. The client uses <code>direct</code> instead of <code>udp</code>:</p>
+<pre><code>{
+  "server": [
+    { "type": "external", "listen": "127.0.0.1:22", "tag": "ssh" },
+    {
+      "type": "dns",
+      "listen": ":53",
+      "domain": "t.example.com",
+      "enc-key": "shared-secret",
+      "target": "ssh"
+    }
+  ],
+  "client": [
+    {
+      "type": "dns",
+      "listen": "127.0.0.1:2222",
+      "domain": "t.example.com",
+      "enc-key": "shared-secret",
+      "direct": "203.0.113.10:53"
+    }
+  ]
+}</code></pre>
+      <p><code>ssh -p 2222 127.0.0.1</code> then reaches <code>127.0.0.1:22</code> on the VPS. Queries go to <code>203.0.113.10:53</code> and never ask a public resolver.</p>
+
+      <h2>Server fields</h2>
+      <table>
+        <tr><th>Field</th><th>Required?</th><th>Default</th><th>Meaning / when required</th></tr>
+        <tr><td><code>type</code></td><td>Required</td><td>—</td><td><code>dns</code>.</td></tr>
+        <tr><td><code>listen</code></td><td>Optional</td><td><code>:53</code></td><td>UDP bind for authoritative DNS. Not a TCP port. Binding port 53 often needs an extra privilege and a firewall hole.</td></tr>
+        <tr><td><code>domain</code></td><td>Required</td><td>—</td><td>Zone this process answers. With <code>udp</code> on the client, publish an NS record for this name that points at the VPS.</td></tr>
+        <tr><td><code>enc-key</code></td><td>Required</td><td>—</td><td>Shared secret. Must match the client. There is no built-in default. Anyone who has the string can impersonate the server.</td></tr>
+        <tr><td><code>mtu</code></td><td>Optional</td><td><code>1232</code></td><td>Maximum DNS response payload. Lower it for a resolver that drops large answers.</td></tr>
+        <tr><td><code>target</code></td><td>Required for a forward server</td><td>—</td><td>Service tag (<code>socks</code>, <code>http</code>, or <code>external</code>). Each accepted smux stream dials that address and copies raw TCP.</td></tr>
+        <tr><td><code>tag</code></td><td>Optional</td><td><code>dns-port</code></td><td>Log label.</td></tr>
+      </table>
+
+      <h2>Client fields</h2>
+      <table>
+        <tr><th>Field</th><th>Required?</th><th>Default</th><th>Meaning / when required</th></tr>
+        <tr><td><code>type</code></td><td>Required</td><td>—</td><td><code>dns</code>.</td></tr>
+        <tr><td><code>listen</code></td><td>Optional</td><td><code>127.0.0.1:7000</code></td><td>Local raw TCP bind. Not a SOCKS port. One accepted connection is one stream.</td></tr>
+        <tr><td><code>domain</code></td><td>Required</td><td>—</td><td>Same zone as the server. Every query name ends with this domain.</td></tr>
+        <tr><td><code>enc-key</code></td><td>Required</td><td>—</td><td>Same string as the server.</td></tr>
+        <tr><td><code>udp</code></td><td>One of <code>udp</code> or <code>direct</code></td><td>—</td><td>Recursive resolver <code>host:53</code>. The resolver walks the DNS hierarchy to the VPS. The client does not dial the VPS.</td></tr>
+        <tr><td><code>direct</code></td><td>One of <code>udp</code> or <code>direct</code></td><td>—</td><td>VPS <code>host:53</code>. Skips the resolver and the NS delegation.</td></tr>
+        <tr><td><code>qtype</code></td><td>Optional</td><td><code>txt</code></td><td><code>txt</code>, <code>aaaa</code>, or <code>a</code>. The server answers in the type the client asks. <code>txt</code> carries the most per reply. <code>aaaa</code> and <code>a</code> are ordinary address lookups, and each reply carries less.</td></tr>
+        <tr><td><code>packet-size</code></td><td>Optional</td><td>largest query that fits</td><td>KCP bytes in each query. Omit it, or set <code>0</code>, and the client uses the maximum for this domain. A smaller value shortens the name and sends less per query. A larger value is rejected. The server answer size stays on the server <code>mtu</code>.</td></tr>
+        <tr><td><code>tag</code></td><td>Optional</td><td><code>type-port</code></td><td>Log label.</td></tr>
+      </table>
+      <p>There is no <code>address</code>, <code>reverse-tag</code>, <code>doh</code>, <code>dot</code>, or <code>utls</code> field.</p>
+
+      <h2>Keys and what DPI sees</h2>
+      <p>Both sides set the same <code>enc-key</code>. PT Proxy derives two keys from it: the Noise static key for the session, and a ChaCha20 key for the query blob and the answer. Each blob is an 8-byte nonce, the ciphertext, and a 4-byte tag. Encryption is always on. A query name is base32 of that blob, then the configured domain. The answer is the same cipher. With <code>qtype</code> <code>txt</code> that is one TXT record. With <code>aaaa</code> or <code>a</code> it is split across address records. A resolver, and any DPI that reads the DNS message, cannot recover the client id or the TCP payload. They can still see the query type and that this host is sending many long names under one zone.</p>
+      <p>On the <code>udp</code> path the packet toward the resolver is plaintext DNS. On the <code>direct</code> path that same DNS packet goes to the VPS address, so the path can also associate the flow with the server IP.</p>
+
+      <h2>How it works</h2>
+      <p>The client encodes one KCP packet into each query. That packet is as large as the domain allows, unless <code>packet-size</code> sets a smaller one. The server decrypts the name, feeds KCP, and completes Noise and smux. Each smux stream dials <code>target</code> and copies bytes both ways. Downstream KCP packets are bundled into the answer until <code>mtu</code>. An <code>aaaa</code> or <code>a</code> client gets a smaller server MTU so each segment still fits in one reply. Polling continues while the session is idle so the server has a query to answer. The name stays a subdomain of <code>domain</code> because that suffix is what the recursive resolver uses to find the authoritative server.</p>
+    </main>
+  </div>
+  <script src="nav.js"></script>
+</body>
+</html>

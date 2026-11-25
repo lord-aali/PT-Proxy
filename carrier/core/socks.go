@@ -68,13 +68,14 @@ func RunClientSocks(sess *ClientSession, cfg SocksConfig) error {
 
 // RunClientForward pipes each accepted local TCP/UDP connection through the tunnel.
 // Server uses its configured target (socks/http/external); open address may be empty.
-func RunClientForward(sess *ClientSession, listen, target string, skipUDP bool, logTag string) error {
+// protocol and destination are only for the ready log line.
+func RunClientForward(sess *ClientSession, listen, target string, skipUDP bool, logTag, protocol, destination string) error {
 	lg := ptlog.PTLog{LogTag: logTag}
 	ln, udp, bound, err := dualbind.Listen(listen)
 	if err != nil {
 		return err
 	}
-	lg.Info("carrier forward listen", bound)
+	lg.InfoDelayed(time.Second, "Client started listening", bound, "forward via", protocol, "to", destination)
 	if udp != nil && !skipUDP {
 		go forwardUDP(sess, udp, target, lg)
 	}

@@ -107,12 +107,11 @@ func (p *ProxyServer) RunTCP() error {
 	if addr == "" {
 		return fmt.Errorf("no listen address")
 	}
-	ln, udp, bound, err := dualbind.Listen(addr)
+	ln, udp, _, err := dualbind.Listen(addr)
 	if err != nil {
 		return err
 	}
 	p.listeners = append(p.listeners, ln)
-	p.log.Info("forward listen", bound)
 	if udp != nil && !p.skipUDP {
 		go p.handleUDPForward(udp)
 	}

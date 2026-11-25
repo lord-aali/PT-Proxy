@@ -82,7 +82,7 @@ func RunTCPClient(cfg Config) error {
 		} else {
 			// Raw dualbind like obfs/muxpipe: apps speak SOCKS to listen;
 			// server dials target (socks/http/external).
-			err = core.RunClientForward(sess, cfg.Listen, "", cfg.SkipUDP, cfg.LogTag)
+			err = core.RunClientForward(sess, cfg.Listen, "", cfg.SkipUDP, cfg.LogTag, "tcp", cfg.Address)
 		}
 		_ = sess.Close()
 		if err != nil {

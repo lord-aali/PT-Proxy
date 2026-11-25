@@ -426,29 +426,68 @@ type tcpUpstream struct {
 	connID  uint32
 	conn    net.Conn
 	sendSeq atomic.Uint32
+	wmu     sync.Mutex
 }
 
 var (
 	tcpUpMu sync.RWMutex
 	tcpUps  = make(map[string]*tcpUpstream)
+	// Bytes that arrived before tcpDial published the conn. A second upload
+	// channel can deliver the SOCKS greeting while Dial is still in progress.
+	tcpPend = make(map[string][][]byte)
 )
+
+const tcpPendMax = 256 * 1024
+
+func tcpWrite(u *tcpUpstream, p []byte) error {
+	u.wmu.Lock()
+	defer u.wmu.Unlock()
+	_, err := u.conn.Write(p)
+	return err
+}
 
 func tcpDial(token string, connID uint32, target string) (*tcpUpstream, error) {
 	key := connKey(token, connID)
 	tcpUpMu.Lock()
-	defer tcpUpMu.Unlock()
 	if u, ok := tcpUps[key]; ok {
+		tcpUpMu.Unlock()
 		return u, nil
 	}
+	tcpUpMu.Unlock()
 	if ext := strings.TrimSpace(cfgTarget); ext != "" {
 		target = ext
 	}
 	conn, err := net.DialTimeout("tcp", target, 10*time.Second)
 	if err != nil {
+		tcpUpMu.Lock()
+		delete(tcpPend, key)
+		tcpUpMu.Unlock()
 		return nil, err
 	}
 	u := &tcpUpstream{key: key, token: token, connID: connID, conn: conn}
+	u.wmu.Lock()
+	tcpUpMu.Lock()
+	if old, ok := tcpUps[key]; ok {
+		tcpUpMu.Unlock()
+		u.wmu.Unlock()
+		conn.Close()
+		return old, nil
+	}
+	pend := tcpPend[key]
+	delete(tcpPend, key)
 	tcpUps[key] = u
+	tcpUpMu.Unlock()
+	var werr error
+	for _, p := range pend {
+		if _, werr = u.conn.Write(p); werr != nil {
+			break
+		}
+	}
+	u.wmu.Unlock()
+	if werr != nil {
+		tcpRemove(key)
+		return nil, werr
+	}
 	lg.Info(fmt.Sprintf("[tcp %s] → %s", key, target))
 	go pumpTCP(u)
 	return u, nil
@@ -460,6 +499,7 @@ func tcpRemove(key string) {
 		u.conn.Close()
 		delete(tcpUps, key)
 	}
+	delete(tcpPend, key)
 	tcpUpMu.Unlock()
 }
 
@@ -470,6 +510,11 @@ func tcpRemoveAll(token string) {
 		if strings.HasPrefix(key, prefix) {
 			u.conn.Close()
 			delete(tcpUps, key)
+		}
+	}
+	for key := range tcpPend {
+		if strings.HasPrefix(key, prefix) {
+			delete(tcpPend, key)
 		}
 	}
 	tcpUpMu.Unlock()
@@ -600,14 +645,22 @@ func processFrame(token string, f *common.Frame) {
 			writeDown(token, []*common.Frame{{ConnID: f.ConnID, Type: common.TypeClose}})
 		}
 	case common.TypeData:
-		tcpUpMu.RLock()
+		tcpUpMu.Lock()
 		u, ok := tcpUps[key]
-		tcpUpMu.RUnlock()
 		if !ok {
+			n := 0
+			for _, p := range tcpPend[key] {
+				n += len(p)
+			}
+			if n < tcpPendMax {
+				tcpPend[key] = append(tcpPend[key], append([]byte(nil), f.Data...))
+			}
+			tcpUpMu.Unlock()
 			return
 		}
+		tcpUpMu.Unlock()
 		common.GlobalMetrics.BytesUp.Add(int64(len(f.Data)))
-		if _, err := u.conn.Write(f.Data); err != nil {
+		if err := tcpWrite(u, f.Data); err != nil {
 			tcpRemove(key)
 		}
 	case common.TypeUDPData:
@@ -842,7 +895,7 @@ func (s *ftpSess) serve() {
 		h, _, _ := net.SplitHostPort(s.conn.LocalAddr().String())
 		b = fmt.Sprintf(b, h)
 	}
-	s.sendf(220, b)
+	s.sendf(220, "%s", b)
 
 	for {
 		line, err := s.rw.ReadString('\n')
@@ -925,7 +978,7 @@ func (s *ftpSess) serve() {
 				s.sendf(213, "%d", s.rng.Intn(500000)+1000)
 			}
 		case "MDTM":
-			s.sendf(213, time.Now().UTC().Format("20060102150405"))
+			s.sendf(213, "%s", time.Now().UTC().Format("20060102150405"))
 		case "NOOP":
 			s.sendf(200, "NOOP ok.")
 		case "TYPE":

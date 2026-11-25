@@ -101,6 +101,8 @@ func main() {
 			launchMoQServer(c, tag, targetAddr, skipUDP)
 		case "cwg":
 			launchCWGServer(c, tag, targetAddr, skipUDP)
+		case "dns":
+			launchDNSServer(c, tag, targetAddr, skipUDP)
 		default:
 			obfsServer := ObfsServer.Server{LogTag: tag, Target: targetAddr, SkipUDP: skipUDP}
 			if isLaunched, ls := obfsServer.Setup(c); isLaunched {
@@ -143,6 +145,8 @@ func main() {
 			launchMoQClient(c, tag, reverseAddr, skipUDP)
 		case "cwg":
 			launchCWGClient(c, tag, reverseAddr, skipUDP)
+		case "dns":
+			launchDNSClient(c, tag, reverseAddr, skipUDP)
 		default:
 			obfsClient := ObfsClient.Client{LogTag: tag, ReverseAddr: reverseAddr, SkipUDP: skipUDP}
 			if isLaunched, ls := obfsClient.Setup(c); isLaunched {
